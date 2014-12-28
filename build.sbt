@@ -49,8 +49,17 @@ lazy val ibClient = (project in file ("ib-client")).
 lazy val demo = (project in file ("demo")).
   dependsOn(ibClient).
   settings(buildSettings: _*).
+  settings(initialCommands in console :=
+    """|import scala.concurrent.duration._
+       |import akka.testkit.{ TestActors, TestKit, ImplicitSender }
+       |import io.deftrade._
+       |import demo._
+       |import Ib._
+       |object TK extends TestKit(system)
+       |import TK._
+       |""".stripMargin).
   settings(
     libraryDependencies ++=
-      Seq(akka, testkit) ++
+      Seq(xml, akka, testkit) ++
       Seq(scalatest).map(_ % Test)
   )

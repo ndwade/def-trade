@@ -16,7 +16,7 @@
 import akka.actor._
 import akka.actor.ActorDSL._
 import io.deftrade._
-import java.io.{ FileOutputStream, PrintStream }
+import java.io.{ File, FileOutputStream, PrintStream }
 
 // TODO: add statements to execute at start
 // TODO: stuff msg logs in some dir (~/.def-trade)?
@@ -48,12 +48,22 @@ package object demo {
     clazzs map { subs.subscribe(consoleActor, _) } reduce { _ & _ }
   }
 
+  private val homename = System.getProperty("user.home")
+  private val dirname = ".def-trade"
+  private val dir = new File(homename, dirname)
+  
+  if (!dir.exists()) dir.mkdir()  // TODO: Log this
+  
   def fileMsgs(clazzs: Class[_]*): Boolean = {
     val filename = s"""msgs-${clazzs map (_.getSimpleName) mkString "-"}"""
-    val fos = new FileOutputStream(filename, /* append = */ true)
+    val file = new File(dir, filename)
+    if (!file.exists()) file.createNewFile()
+    val fos = new FileOutputStream(file, /* append = */ true)
     val ps = new PrintStream(fos, /* autoFlush = */ true)
     val fileActor = psAct(ps, filename)
     clazzs map { subs.subscribe(fileActor, _) } reduce { _ & _ }
+    
+    // FIXME: handles shouldn't leak; should close the files - maybe listen for disconnect?
   }
 
   def defaultMsgHandling(): Boolean = Seq(

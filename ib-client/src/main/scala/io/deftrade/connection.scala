@@ -36,7 +36,7 @@ class Subscriptions(system: ActorSystem) extends ActorEventBus with SubchannelCl
    * arguably dodgy because the reaper actor closes over the "this" pointer of the Subscriptions
    * instance... pretty sure this is OK in this instance but generally not best practice. 
    */
-  private val reaper = actor(system, "subscription-reaper") {
+  private val reaper = actor(system, name = "subscription-reaper") {
     new Act {
       become {
         case Subscribed(subscriber) => context.watch(subscriber)
@@ -68,44 +68,60 @@ trait SubscriptionsComponent {
 }
 
 /**
+ * Trait providing access to config settings.
+ */
+
+trait ConfigSettings {
+  def settings: SettingsImpl
+}
+
+/**
  * Implements the IbConnection actor, which manages the connection to TWS.
  */
 abstract class IbConnectionComponent(val system: ActorSystem)
-  extends SubscriptionsComponent with DTOs with IncomingMessages with OutgoingMessages {
+  extends SubscriptionsComponent with DTOs with IncomingMessages with OutgoingMessages with ConfigSettings {
 
   _: DomainTypesComponent =>
 
-  //  /**
-  //   * Base type for EventBus, to be refined by client extensions
-  //   */
-  //  type EventBusType <: ActorEventBus { type Event = AnyRef /* IncommingMessage*/ }
-  //
-  //  /**
-  //   * Factory method for event bus, to be implemented by client extensions
-  //   */
-  //  def eventBus: EventBusType
+  /**
+   * Configuration settings - read only.
+   */
+
+  override final val settings = Settings(system)
 
   /**
    * An EventBus instance which holds all the subscriptions for message deliver.
    */
   //  final val subs: ActorEventBus = new Subscriptions
-  val subs = new Subscriptions(system)
+  final val subs = new Subscriptions(system)
   /**
    * The Actor (and FSM) which manages the connection state, reads and writes messages to the
    * socket, and publishes TWS API messages, connection status messages and error messages.
+   *
+   * The connection automatically throttles messages to avoid exceeding the rate limit set
+   * by IB (50 msgs/sec).
    */
-  final val conn: ActorRef = system.actorOf(Props(new IbConnection), name = "ib-conn")
+  final val conn: ActorRef = {
+    val rawConn = system.actorOf(
+      Props(new IbConnection).
+        withDispatcher("deftrade.ibc.connection-dispatcher"),
+      name = "ib-conn")
+    system.actorOf(
+      throttle.ApiMsgThrottler.props(dest = rawConn).
+        withDispatcher("deftrade.ibc.connection-dispatcher"),
+      name = "ib-throttle")
+  }
 
   /**
    * Minimum TWS API client version which clients of this library may be written against.
    */
-  val clientVersion: Int = 62
+  final val clientVersion: Int = 62
 
   /**
    * Minimum TWS API server version which this library supports. Note, this must never be less
    * than 20.
    */
-  val minServerVersion = 66
+  final val minServerVersion = 66
 
   /**
    * An Actor based FSM which manages the connection to the TWS API socket.
@@ -339,7 +355,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
     sealed trait Data
     case object Empty extends Data
     case class Connection(os: OutputStream, reader: Reader, ok: IbConnectOk) extends Data
-    case class Disconnection(connMsg: IbConnectionMessage) extends Data 
+    case class Disconnection(connMsg: IbConnectionMessage) extends Data
 
     /*
      * messages private to the FSM / Future / Reader complex
@@ -401,11 +417,11 @@ abstract class IbConnectionComponent(val system: ActorSystem)
             case 57 => TickSnapshotEnd.read
             case 58 => MarketDataType.read
             case 59 => CommissionReportMsg.read
-//            case 61 => Position.read
-//            case 62 => PositionEnd.read
-//            case 63 => AccountSummary.read
-//            case 64 => AccountSummaryEnd.read
-            
+            //            case 61 => Position.read
+            //            case 62 => PositionEnd.read
+            //            case 63 => AccountSummary.read
+            //            case 64 => AccountSummaryEnd.read
+
             case -1 => throw new TerminatedId()
             case unk => throw new UnknownId(unk)
           }
@@ -416,71 +432,71 @@ abstract class IbConnectionComponent(val system: ActorSystem)
       }
     }
   }
-}
 
-private[deftrade] object throttle {
+  private[deftrade] object throttle {
 
-  import scala.collection.immutable.Queue
+    import scala.collection.immutable.Queue
 
-  sealed trait State
-  case object Active extends State
-  case object Idle extends State
+    sealed trait State
+    case object Active extends State
+    case object Idle extends State
 
-  // holds max possible messages in each interval
-  type Quotas = Queue[Int]
+    // holds max possible messages in each interval
+    type Quotas = Queue[Int]
 
-  final class ApiMsgThrottler private (dest: ActorRef, msgsPerSec: Int, intervalsPerSec: Int)
-    extends Actor with Stash with LoggingFSM[State, Quotas] {
+    final class ApiMsgThrottler private (dest: ActorRef, msgsPerSec: Int, intervalsPerSec: Int)
+      extends Actor with Stash with LoggingFSM[State, Quotas] {
 
-    // divide a second into equal intervals
-    import scala.concurrent.duration._
-    val interval = (1.0 / intervalsPerSec).second
+      // divide a second into equal intervals
+      import scala.concurrent.duration._
+      val interval = (1.0 / intervalsPerSec).second
 
-    // when a message is forwarded, charge it against _all_ intervals in the next second
-    private def chargeMsgAgainst(qs: Quotas) = { qs map (_ - 1) } ensuring { qs forall (_ >= 0) }
+      // when a message is forwarded, charge it against _all_ intervals in the next second
+      private def chargeMsgAgainst(qs: Quotas) = { qs map (_ - 1) } ensuring { qs forall (_ >= 0) }
 
-    // current interval is done; interval ending one second later gets full quota
-    private def replenish(qs: Quotas) = {
-      val (_, rest) = qs.dequeue
-      rest enqueue msgsPerSec
+      // current interval is done; interval ending one second later gets full quota
+      private def replenish(qs: Quotas) = {
+        val (_, rest) = qs.dequeue
+        rest enqueue msgsPerSec
+      }
+
+      case object Tick
+      override def preStart() = {
+        setTimer("intervalTimer", Tick, interval, repeat = true)
+        initialize()
+      }
+
+      startWith(Active, Queue.fill(intervalsPerSec + 1) { msgsPerSec })
+
+      when(Active) {
+        case Event(Tick, quotas) => stay using replenish(quotas)
+        case Event(msg, quotas) if quotas.front > 0 =>
+          dest forward msg
+          stay using chargeMsgAgainst(quotas)
+        case Event(_, _) => // exhausted quota for this interval
+          stash()
+          goto(Idle)
+      }
+
+      when(Idle) {
+        case Event(Tick, quotas) =>
+          unstashAll()
+          goto(Active) using replenish(quotas)
+        case Event(_, _) =>
+          stash()
+          stay
+      }
+
+      onTermination {
+        case _ => cancelTimer("intervalTimer")
+      }
+
     }
 
-    case object Tick
-    override def preStart() = {
-      setTimer("intervalTimer", Tick, interval, repeat = true)
-      initialize()
+    object ApiMsgThrottler {
+      import settings.ibc.{ msgsPerSec, intervalsPerSec }
+      def props(dest: ActorRef, msgsPerSec: Int = msgsPerSec, intervalsPerSec: Int = intervalsPerSec) =
+        Props(new ApiMsgThrottler(dest, msgsPerSec, intervalsPerSec))
     }
-
-    startWith(Active, Queue.fill(intervalsPerSec + 1) { msgsPerSec })
-
-    when(Active) {
-      case Event(Tick, quotas) => stay using replenish(quotas)
-      case Event(msg, quotas) if quotas.front > 0 =>
-        dest forward msg
-        stay using chargeMsgAgainst(quotas)
-      case Event(_, _) => // exhausted quota for this interval
-        stash()
-        goto(Idle)
-    }
-
-    when(Idle) {
-      case Event(Tick, quotas) =>
-        unstashAll()
-        goto(Active) using replenish(quotas)
-      case Event(_, _) =>
-        stash()
-        stay
-    }
-
-    onTermination {
-      case _ => cancelTimer("intervalTimer")
-    }
-
   }
-
-  object ApiMsgThrottler {
-    def props(dest: ActorRef, msgsPerSec: Int, intervalsPerSec: Int = 10): Props =
-      Props(new ApiMsgThrottler(dest, msgsPerSec, intervalsPerSec))
-  }
-
 }

@@ -43,10 +43,10 @@ object ThrottlerSpec {
   }
 }
 
-class ThrottlerSpec extends TestKit(ActorSystem("ThrottlerSpec")) with ImplicitSender
+class ThrottlerSpec extends ConnectionSpecBase(ActorSystem("ThrottlerSpec")) with ImplicitSender
   with WordSpecLike with Matchers with BeforeAndAfterAll {
 
-  import throttle._
+  import IB.throttle._
   import ThrottlerSpec._
 
   def sendMsgs(n: Int, throttler: ActorRef): Unit = (1 to n) foreach {

@@ -4,7 +4,7 @@ import Tests._
 
 object Version {
   val Scala = "2.11.4"
-  val Akka = "2.3.7"
+  val Akka = "2.3.8"
   val ScalaTest = "2.2.1"
   //val ScalaCheck = "1.11.3"
 }

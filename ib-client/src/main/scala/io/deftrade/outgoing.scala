@@ -27,8 +27,8 @@ private[deftrade] object MinServerVer {
   val ScaleTable = 69
 }
 
-private[deftrade] object OutgoingMessages {
-
+private[deftrade] object OutgoingMessages { 
+  
   // TODO: support FA messages
 
   import java.io.{ DataInputStream, OutputStream, IOException }
@@ -62,7 +62,7 @@ private[deftrade] object OutgoingMessages {
 
 }
 
-trait OutgoingMessages { _: DomainTypesComponent with DTOs =>
+trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =>
 
   import java.io.{ DataInputStream, OutputStream, IOException }
   import ImplicitConversions._
@@ -71,7 +71,10 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs =>
 
   import OutgoingMessages._
 
-  case class IbConnect(host: String = "127.0.0.1", port: Int, clientId: Int)
+  case class IbConnect(
+      host: String = settings.ibc.host, 
+      port: Int = settings.ibc.port, 
+      clientId: Int = settings.ibc.clientId)
 
   case class IbDisconnect(why: String)
 

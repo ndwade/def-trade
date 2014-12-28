@@ -60,9 +60,9 @@ package io {
    *
    * issue: routing for OrderStatus messages (etc).
    * - route the consolidated response to the actor which made the request (or its delegate).
-   * - allow requestor to provide a function which consolidates the responses.
+   * - allow requester to provide a function which consolidates the responses.
    * - allow other actors to subscribe to order fills generally (thru Subscriptions)
-   * - allow other actors to subscrube to consolidated order fills (thru OMS)
+   * - allow other actors to subscribe to consolidated order fills (thru OMS)
    *
    * Risk budgeting: Account should have a simple risk managment strategy - simpler than the
    * Portfolio margin rules of IB - but could be more aggressive than a simple margin account.
@@ -74,11 +74,13 @@ package io {
    * "Inactive" status: https://groups.yahoo.com/neo/groups/TWSAPI/conversations/topics/22357
    * Multiple causes - knowing when to reuse OrderId is tricky - policy will be to burn new OrderId
    *
-   * todo: ape the logging/config setup of "smoke" (http project on github).
    *
    */
 
   package object deftrade {
+    
+    // FIXME: framework-wide utilities must be factored into a separate util proj
+    // once the services subprojexts are in place.
 
     import scala.language.implicitConversions
 
@@ -106,11 +108,18 @@ package io.deftrade {
   }
 
   private[deftrade] class SettingsImpl(config: Config) extends Extension {
-    object ib {
-      val host: String = config.getString("deftrade.ib.host")
-      val port: Int = config.getInt("deftrade.ib.port")
-      val cliendId: Int = config.getInt("deftrade.ib.client-id")
+    object ibc {      
+      val host: String = config.getString("deftrade.ibc.host")
+      val port: Int = config.getInt("deftrade.ibc.port")
+      val clientId: Int = config.getInt("deftrade.ibc.client-id")
+      val msgsPerSec: Int = config.getInt("deftrade.ibc.throttle.max-msgs-per-sec")
+      val intervalsPerSec: Int = config.getInt("deftrade.ibc.throttle.intervals-per-sec")
     }
+    object oms
+    object ams
+    object mds
+    object rds
+    object hds
   }
 
   /**
@@ -137,6 +146,7 @@ package io.deftrade {
     }
 
     import scala.util.control.NonFatal
+    
     class SingleThreadPool extends java.util.concurrent.Executor {
       import java.util.concurrent.RejectedExecutionException
       private[this] val lock = new {}
