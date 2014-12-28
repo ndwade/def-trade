@@ -23,7 +23,6 @@ project/plugins/project/
 .settings/
 .project
 .classpath
-.cache
 local.properties
 bin/
 
