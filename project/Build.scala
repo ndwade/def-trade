@@ -25,7 +25,8 @@ object Dependencies {
   val scalatest = "org.scalatest" %% "scalatest" % Version.ScalaTest
   //val scalacheck = "org.scalacheck" %% "scalacheck" % Version.ScalaCheck
 
-  //val slf4j = "com.typesafe.akka" %% "akka-slf4j" % Version.Akka
+  val slf4j = "com.typesafe.akka" %% "akka-slf4j" % Version.Akka
+  val logback = "ch.qos.logback" % "logback-classic" % "1.1.2"
 }
 
 object Defs {

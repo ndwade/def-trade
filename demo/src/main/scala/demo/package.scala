@@ -18,8 +18,6 @@ import akka.actor.ActorDSL._
 import io.deftrade._
 import java.io.{ File, FileOutputStream, PrintStream }
 
-// TODO: add statements to execute at start
-// TODO: stuff msg logs in some dir (~/.def-trade)?
 package demo {
   object Ib extends IbConnectionComponent(ActorSystem("demo")) with IbDomainTypesComponent
 }
@@ -28,16 +26,17 @@ package object demo {
 
   import Ib._
   import Right._
-
+  
+  val config = Ib.system.settings.config
   val timestampFormat = new java.text.SimpleDateFormat("HH:mm:ss:SSS")
 
   private def psAct(ps: PrintStream, name: String): ActorRef =
     actor(system, name) {
       new Act {
         become {
-          case msg =>
+          case msg: IncomingMessage =>
             val ts = timestampFormat.format(new java.util.Date())
-            ps.println(s"$ts -> $msg")
+            ps.println(s"$ts -> ${msg.indent}")
         }
         whenStopping { ps.close() }
       }
@@ -48,15 +47,15 @@ package object demo {
     clazzs map { subs.subscribe(consoleActor, _) } reduce { _ & _ }
   }
 
-  private val homename = System.getProperty("user.home")
-  private val dirname = ".def-trade"
-  private val dir = new File(homename, dirname)
+  private val msgsDir = new File(
+      System.getProperty("user.dir"), 
+      config.getString("demo.msgs-dir"))
   
-  if (!dir.exists()) dir.mkdir()  // TODO: Log this
+  if (!msgsDir.exists()) msgsDir.mkdir()
   
   def fileMsgs(clazzs: Class[_]*): Boolean = {
     val filename = s"""msgs-${clazzs map (_.getSimpleName) mkString "-"}"""
-    val file = new File(dir, filename)
+    val file = new File(msgsDir, filename)
     if (!file.exists()) file.createNewFile()
     val fos = new FileOutputStream(file, /* append = */ true)
     val ps = new PrintStream(fos, /* autoFlush = */ true)

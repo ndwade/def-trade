@@ -20,21 +20,15 @@ project/plugins/project/
 #
 # eclipse
 #
-.settings/
+.settings
 .project
 .classpath
 local.properties
 bin/
 
 #
-# sbteclipse plugin
-#
-.target
-
-#
 # scala-ide
 #
-.scala_dependencies
 .worksheet/
 
 #
@@ -100,4 +94,4 @@ $RECYCLE.BIN/
 ib-client/src/test/java/com/ib/
 
 # Random files go here
-.scratch/
+.scratch

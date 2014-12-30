@@ -60,6 +60,6 @@ lazy val demo = (project in file ("demo")).
        |""".stripMargin).
   settings(
     libraryDependencies ++=
-      Seq(xml, akka, testkit) ++
+      Seq(xml, akka, testkit, slf4j, logback) ++
       Seq(scalatest).map(_ % Test)
   )
