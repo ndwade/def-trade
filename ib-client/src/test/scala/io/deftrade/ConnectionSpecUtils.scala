@@ -314,8 +314,6 @@ abstract class OutgoingSpecBase(_system: ActorSystem) extends ConnectionSpecBase
 
   def this(name: String) = this(ActorSystem(name))
 
-  protected val REQ_ID = 33 // totally arbitrary
-
   import IB._
 
   import TestServer._

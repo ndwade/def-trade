@@ -103,7 +103,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
    *
    */
   case class ReqMktData(
-    tickerId: TickId,
+    tickerId: ReqId,
     contract: Contract,
     genericTickList: List[GenericTickType],
     snapshot: Boolean) extends OutgoingMessage {
@@ -137,7 +137,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
 
   object ReqMktData { val api = (1, 10) }
 
-  case class CancelMktData(tickerId: TickId) extends OutgoingMessage {
+  case class CancelMktData(tickerId: ReqId) extends OutgoingMessage {
     import CancelMktData._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
@@ -149,7 +149,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
     val api = (2, 1)
   }
 
-  case class ReqMktDepth(tickerId: TickId, contract: Contract, numRows: Int) extends OutgoingMessage {
+  case class ReqMktDepth(tickerId: ReqId, contract: Contract, numRows: Int) extends OutgoingMessage {
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass) {
@@ -172,7 +172,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
     val api = (10, 4)
   }
 
-  case class CancelMktDepth(tickerId: TickId) extends OutgoingMessage {
+  case class CancelMktDepth(tickerId: ReqId) extends OutgoingMessage {
     import CancelMktDepth._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
@@ -565,7 +565,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
   /**
    *
    */
-  case class ReqRealTimeBars(tickerId: TickId,
+  case class ReqRealTimeBars(tickerId: ReqId,
     contract: Contract,
     barSize: Int,
     whatToShow: String,
@@ -596,7 +596,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
     val api = (50, 2)
   }
 
-  case class CancelRealTimeBars(tickerId: TickId) extends OutgoingMessage {
+  case class CancelRealTimeBars(tickerId: ReqId) extends OutgoingMessage {
 
     import CancelRealTimeBars._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {

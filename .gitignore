@@ -1,13 +1,7 @@
-#
-# scala
-#
-*.class
-*.log
 
-#
 # sbt
 #
-.cache
+**/.cache
 .history
 .lib/
 dist/*
@@ -20,7 +14,7 @@ project/plugins/project/
 #
 # eclipse
 #
-.settings
+**/.settings/
 .project
 .classpath
 local.properties
@@ -94,4 +88,5 @@ $RECYCLE.BIN/
 ib-client/src/test/java/com/ib/
 
 # Random files go here
-.scratch
+**/.scratch/
+**/logs/

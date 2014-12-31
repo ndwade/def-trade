@@ -79,13 +79,10 @@ package io {
 
   package object deftrade {
     
-    // FIXME: framework-wide utilities must be factored into a separate util proj
+    // TODO: framework-wide utilities must be factored into a separate util proj
     // once the services subprojexts are in place.
 
     import scala.language.implicitConversions
-
-    /** FIXME: this is a shim until we get rid of this type */
-    type TickId = ReqId
 
     def indent[A: Indentable](a: A): String = misc.indent(a.toString)
 

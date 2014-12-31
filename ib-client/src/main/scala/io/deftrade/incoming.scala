@@ -277,7 +277,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   /**
    *
    */
-  case class TickPrice(tickerId: TickId, field: TickType, price: MoneyType, canAutoExecute: Boolean)
+  case class TickPrice(tickerId: ReqId, field: TickType, price: MoneyType, canAutoExecute: Boolean)
     extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -301,7 +301,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
       Map(BID -> BID_SIZE, ASK -> ASK_SIZE, LAST -> LAST_SIZE) withDefaultValue INVALID
   }
 
-  case class TickSize(tickerId: TickId, field: TickType, size: Int) extends MarketDataMessage {
+  case class TickSize(tickerId: ReqId, field: TickType, size: Int) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object TickSize {
@@ -312,7 +312,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
-  case class TickGeneric(tickerId: TickId, tickType: TickType, value: Double) extends MarketDataMessage {
+  case class TickGeneric(tickerId: ReqId, tickType: TickType, value: Double) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -324,7 +324,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
-  case class TickString(tickerId: TickId, tickType: TickType, value: String) extends MarketDataMessage {
+  case class TickString(tickerId: ReqId, tickType: TickType, value: String) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -337,7 +337,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   }
 
   case class TickOptionComputation(
-    tickerId: TickId,
+    tickerId: ReqId,
     field: TickType,
     impliedVol: Option[Double],
     delta: Option[Double],
@@ -402,7 +402,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   /**
    *
    */
-  case class TickEFP(tickerId: TickId, tickType: TickType, basisPoints: Double,
+  case class TickEFP(tickerId: ReqId, tickType: TickType, basisPoints: Double,
     formattedBasisPoints: String, impliedFuture: MoneyType, holdDays: Int,
     futureExpiry: String, dividendImpact: Double, dividendsToExpiry: MoneyType) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
@@ -420,7 +420,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   /**
    *
    */
-  case class TickSnapshotEnd(reqId: TickId) extends MarketDataMessage {
+  case class TickSnapshotEnd(reqId: ReqId) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
   case object TickSnapshotEnd {
@@ -434,7 +434,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   /**
    *
    */
-  case class RealTimeBar(tickerId: TickId, time: Long,
+  case class RealTimeBar(tickerId: ReqId, time: Long,
     open: MoneyType, high: MoneyType, low: MoneyType, close: MoneyType,
     volume: Long, wap: MoneyType, count: Int) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
@@ -453,7 +453,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   import DeepType.DeepType
   import DeepSide.DeepSide
 
-  case class UpdateMktDepth(tickerId: TickId, position: Int, operation: DeepType,
+  case class UpdateMktDepth(tickerId: ReqId, position: Int, operation: DeepType,
     side: DeepSide, price: MoneyType, size: Int) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -466,7 +466,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
-  case class UpdateMktDepthL2(tickerId: TickId, position: Int, marketMaker: String,
+  case class UpdateMktDepthL2(tickerId: ReqId, position: Int, marketMaker: String,
     operation: DeepType, side: DeepSide, price: MoneyType, size: Int) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }

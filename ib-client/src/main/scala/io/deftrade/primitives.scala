@@ -69,27 +69,32 @@ sealed trait GenId extends Any {
   def id: Int
 }
 
-trait GenIdCompanion[I <: GenId] {
-  def apply(id: Int): I
+sealed trait GenIdCompanion[GID <: GenId] {
+  def apply(id: Int): GID
   import math.Ordering
-  implicit lazy val ordering: Ordering[I] = Ordering.by[I, Int](_.id)
-  implicit def ops(i: I) = ordering.mkOrderingOps(i)
-  private[deftrade] implicit def id2s(i: I) = i.id.toString
-  private[deftrade] implicit def s2id(s: String): I = apply(s.toString)
+  implicit lazy val ordering: Ordering[GID] = Ordering.by[GID, Int](_.id)
+  implicit def ops(i: GID) = ordering.mkOrderingOps(i)
+  private[deftrade] implicit def id2s(i: GID) = i.id.toString
+  private[deftrade] implicit def s2id(s: String): GID = apply(s.toString)
 }
 
 /**
- *
+ * OrderId range is Int.MinVal to 0x3fffffff
  */
 case class OrderId(val id: Int) extends /* AnyVal with */ GenId
 object OrderId extends GenIdCompanion[OrderId]
 /**
- *
+ * ReqId range is 0x40000000 to 0x7fffffff
  */
 case class ReqId(val id: Int) extends /* AnyVal with */ GenId
-object ReqId extends GenIdCompanion[ReqId]
+object ReqId extends GenIdCompanion[ReqId] {
+  val offset = 0x40000000
+  override private[deftrade] implicit def id2s(i: ReqId) = (i.id + offset).toString
+  override private[deftrade] implicit def s2id(s: String): ReqId = apply((s.toString: Int) - offset)
+}
 /**
  *
  */
 case class ConId(val id: Int) extends /* AnyVal with */ GenId
 object ConId extends GenIdCompanion[ConId]
+

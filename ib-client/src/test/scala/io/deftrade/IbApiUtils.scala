@@ -87,6 +87,7 @@ trait IbApiUtils {
               x === s
           }
 
+        case ReqId(id) => id + ReqId.offset === y
         case g: GenId => g.id === y
 
         case Some(xx) => xx =~= y
@@ -169,6 +170,7 @@ trait IbApiUtils {
     x match {
       case _: Int | _: Long | _: Double | _: Boolean | _: String => x
       case e: Enumeration#Value => e // (sic) - have to let assignIbField figure it out
+      case ReqId(id) => id + ReqId.offset
       case g: GenId => g.id
       case sx @ Some(xx) => xx match {
         case i: Int => i
@@ -234,7 +236,6 @@ trait IbApiUtils {
     else if (tpe =:= typeOf[ConId]) new ConId(333)
     else if (tpe =:= typeOf[ReqId]) new ReqId(444)
     else if (tpe =:= typeOf[OrderId]) new OrderId(555)
-    else if (tpe =:= typeOf[TickId]) new TickId(777)
     else if (tpe =:= typeOf[(String, String)]) (oneOf(strings), oneOf(strings))
     else if (tpe <:< typeOf[Option[_]]) {
       val TypeRef(_, _, List(argType)) = tpe

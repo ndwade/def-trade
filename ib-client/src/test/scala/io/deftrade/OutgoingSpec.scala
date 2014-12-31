@@ -44,10 +44,11 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
     }
 
     "send same byte stream as EClientSocket for ReqContractDetails" in repeat(n) {
+      val (reqId, ibReqId) = genDtoAndIbHomolog[ReqId]
       val (contract, ibContract) = genDtoAndIbHomolog[Contract]
       assertOmWritesEqual(
-        ReqContractDetails(reqId = new ReqId(REQ_ID), contract = contract),
-        ibSocket.reqContractDetails(REQ_ID, ibContract))
+        ReqContractDetails(reqId = reqId, contract = contract),
+        ibSocket.reqContractDetails(ibReqId, ibContract))
     }
     "send same byte stream as EClientSocket for ReqIds" in repeat(n) {
       val numIds = 123 // this is basically ignored in the API as far as I can see.
@@ -58,7 +59,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
     "send same byte stream as EClientSocket for ReqMktData" in repeat(n) {
       import GenericTickType._
       misc.repeat(n) {
-        val (tickerId, ibTickerId) = genDtoAndIbHomolog[TickId]
+        val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
         val genericTickList = generate[List[GenericTickType]]
         val ibGenericTickList = (genericTickList map (v => (v: String))) mkString ","
         val (contract, ibContract) = genDtoAndIbHomolog[Contract]
@@ -76,7 +77,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
       }
     }
     "send the same byte stream as EClientSocket for CancelMktData" in repeat(n) {
-      val (tickerId, ibTickerId) = genDtoAndIbHomolog[TickId]
+      val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
       assertOmWritesEqual(
         CancelMktData(tickerId),
         ibSocket.cancelMktData(ibTickerId))
@@ -107,7 +108,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
         ibSocket.reqExecutions(ibReqId, ibExecutionFilter))
     }
     "send same byte stream as EClientSocket for ReqMktDepth" in repeat(n) {
-      val (tickerId, ibTickerId) = genDtoAndIbHomolog[TickId]
+      val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
       val (contract, ibContract) = genDtoAndIbHomolog[Contract]
       val numRows = generate[Int]
       assertOmWritesEqual(
@@ -115,7 +116,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
         ibSocket.reqMktDepth(ibTickerId, ibContract, numRows))
     }
     "send same byte stream as EClientSocket for CancelMktDepth" in repeat(n) {
-      val (tickerId, ibTickerId) = genDtoAndIbHomolog[TickId]
+      val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
       val numRows = generate[Int]
       assertOmWritesEqual(
         CancelMktDepth(tickerId),
@@ -223,7 +224,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
         ibSocket.reqCurrentTime())
     }
     "send same byte stream as EClientSocket for ReqRealTimeBars" in repeat(n) {
-      val (tickerId, ibTickerId) = genDtoAndIbHomolog[TickId]
+      val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
       val (contract, ibContract) = genDtoAndIbHomolog[Contract]
       val barSize = generate[Int]
       val whatToShow = generate[String]
@@ -235,7 +236,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
           barSize, whatToShow, useRTH))
     }
     "send same byte stream as EClientSocket for CancelRealTimeBars" in repeat(n) {
-      val (tickerId, ibTickerId) = genDtoAndIbHomolog[TickId]
+      val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
       assertOmWritesEqual(
         CancelRealTimeBars(tickerId),
         ibSocket.cancelRealTimeBars(ibTickerId))

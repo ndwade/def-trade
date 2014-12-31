@@ -26,7 +26,7 @@ package object demo {
 
   import Ib._
   import Right._
-  
+
   val config = Ib.system.settings.config
   val timestampFormat = new java.text.SimpleDateFormat("HH:mm:ss:SSS")
 
@@ -48,11 +48,11 @@ package object demo {
   }
 
   private val msgsDir = new File(
-      System.getProperty("user.dir"), 
-      config.getString("demo.msgs-dir"))
-  
+    System.getProperty("user.dir"),
+    config.getString("demo.msgs-dir"))
+
   if (!msgsDir.exists()) msgsDir.mkdir()
-  
+
   def fileMsgs(clazzs: Class[_]*): Boolean = {
     val filename = s"""msgs-${clazzs map (_.getSimpleName) mkString "-"}"""
     val file = new File(msgsDir, filename)
@@ -61,7 +61,7 @@ package object demo {
     val ps = new PrintStream(fos, /* autoFlush = */ true)
     val fileActor = psAct(ps, filename)
     clazzs map { subs.subscribe(fileActor, _) } reduce { _ & _ }
-    
+
     // FIXME: handles shouldn't leak; should close the files - maybe listen for disconnect?
   }
 
