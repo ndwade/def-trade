@@ -183,7 +183,8 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    * Codes and messages should be considered part of the API specification. Note this is the only
    * place where the TWS API notion of "error codes" is retained.
    */
-  case class Error(id: Int, errCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
+//  case class Error(id: Int, errCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
+  case class Error(eid: Either[OrderId, ReqId], errorCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -194,8 +195,8 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     val code = 4
     def read(implicit input: DataInputStream): Unit = {
       val version: Int = rdz
-      if (version < 2) subs publish Error(id = -1, errCode = -1, errorMsg = rdz)
-      else subs publish Error(id = rdz, errCode = rdz, errorMsg = rdz)
+      if (version < 2) subs publish Error(eid = "-1", errorCode = -1, errorMsg = rdz)
+      else subs publish Error(eid = rdz, errorCode = rdz, errorMsg = rdz)
     }
   }
 

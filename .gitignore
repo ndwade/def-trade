@@ -1,7 +1,7 @@
 
 # sbt
 #
-**/.cache
+.cache
 .history
 .lib/
 dist/*

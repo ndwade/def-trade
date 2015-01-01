@@ -50,6 +50,12 @@ private[deftrade] object ImplicitConversions {
 
   implicit def s2od(s: String): Option[Double] = if (s.isEmpty) None else Some(s)
   implicit def od2s(od: Option[Double]): String = (od map d2s) getOrElse ""
+  
+  implicit def s2eor(s: String): Either[OrderId, ReqId] = {
+    import scala.util.Right
+    val id: Int = s
+    if (id < ReqId.offset) Left(OrderId(id)) else Right(ReqId(id))
+  }
 
 }
 
@@ -75,7 +81,7 @@ sealed trait GenIdCompanion[GID <: GenId] {
   implicit lazy val ordering: Ordering[GID] = Ordering.by[GID, Int](_.id)
   implicit def ops(i: GID) = ordering.mkOrderingOps(i)
   private[deftrade] implicit def id2s(i: GID) = i.id.toString
-  private[deftrade] implicit def s2id(s: String): GID = apply(s.toString)
+  private[deftrade] implicit def s2id(s: String): GID = apply(s)
 }
 
 /**
@@ -90,7 +96,7 @@ case class ReqId(val id: Int) extends /* AnyVal with */ GenId
 object ReqId extends GenIdCompanion[ReqId] {
   val offset = 0x40000000
   override private[deftrade] implicit def id2s(i: ReqId) = (i.id + offset).toString
-  override private[deftrade] implicit def s2id(s: String): ReqId = apply((s.toString: Int) - offset)
+  override private[deftrade] implicit def s2id(s: String): ReqId = apply((s: Int) - offset)
 }
 /**
  *

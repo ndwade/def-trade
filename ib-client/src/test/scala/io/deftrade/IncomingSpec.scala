@@ -28,9 +28,34 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
 
   import IB._
 
+  // TODO: Error msg
+
   override val nreps = 20
 
   "IbConnection receiving an IncomingMessage from the TestServer " should {
+
+    "deserialize Error homologous with EReader" in {
+      homologize[Error](versions = 1 to 2) {
+        e =>
+          w =>
+            new EWrapperCallbacks(w) {
+              override def error(id: Int, errorCode: Int, errorMsg: String): Unit = {
+                asyncAssertionBlock(w) {
+                  assert(e.eid =~= id)
+                  assert(e.errorCode =~= errorCode)
+                  assert(e.errorMsg =~= errorMsg)
+                }
+              }
+              override def error(errorMsg: String): Unit = {
+                asyncAssertionBlock(w) {
+                  assert(e.eid =~= -1)
+                  assert(e.errorCode =~= -1)
+                  assert(e.errorMsg =~= errorMsg)
+                }
+              }
+            }
+      }
+    }
 
     "deserialize NextValidId homologous with EReader" in {
       homologize[NextValidId](versions = 1 to 1) {

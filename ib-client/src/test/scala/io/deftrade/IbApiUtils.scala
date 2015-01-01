@@ -86,6 +86,9 @@ trait IbApiUtils {
             case s: String =>
               x === s
           }
+        // deal with type Either[OrderId, ReqId]
+        case scala.util.Left(oid) => oid =~= y
+        case scala.util.Right(rid) => rid =~= y
 
         case ReqId(id) => id + ReqId.offset === y
         case g: GenId => g.id === y
