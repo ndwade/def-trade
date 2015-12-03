@@ -17,6 +17,41 @@ package io {
 
   /**
    * global notes
+   * 
+   * moar new ideas 11/17/15
+   * 
+   * usage seems to fall into some distinct request/response patterns.
+   * 
+   * Pure Streams (explicit cancel, no explicit End responce)
+   *  - ticks (incl options comp)
+   *  - bars
+   *  - market depth
+   *  * frozen indicator - akin to synthetic timeout inactivity warnings (tap tap this thing on?)
+   *  - Fundamental data?! Yes, appears to be. Veryify.
+   *  - Historical data - special handling; end must be calculated.
+   *  - news bullitins
+   *  
+   *  Future Aggregate - self canceling, explicit End response
+   *  - ticks (no genericTickList)
+   *  - openOrders (at startup only! TODO - are End responses seen? in regular order flow?)
+   *  - reqExecutions (at startup only! TODO - check this)
+   *  - contractDetails and BondContractDetails
+   *  
+   *  Stream of Aggregates - explicit Cancel, Explicit End Response
+   *  - account value
+   *  - Account summary
+   *  - positions
+   *  - scanner data
+   *  
+   *  Pure RPC
+   *  - scanner parameters
+   *  
+   *  REST-like (seems to be explicit GET and PUT analogs here)
+   *   - FA managed account stuff
+   *   
+   *   ORDER STUFF -> wtf
+   *   DISPLAY GROUPS -> wtfc
+   *  
    *
    * Clean layering: ib client should be usable without service layer
    * Services layer should be usable without persistence schema.

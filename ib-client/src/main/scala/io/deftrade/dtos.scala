@@ -76,9 +76,9 @@ trait DTOs { this: DomainTypesComponent =>
   sealed trait DTO
 
   case class UnderComp(
-    conId: ConId = "",
-    delta: Double = "",
-    price: MoneyType = "") extends DTO {
+      conId: ConId = "",
+      delta: Double = "",
+      price: MoneyType = "") extends DTO {
 
     override def toString: String = nonDefaultNamedValues
 
@@ -100,28 +100,28 @@ trait DTOs { this: DomainTypesComponent =>
    */
   case class Contract(
 
-    conId: ConId = "",
-    symbol: String = "",
-    secType: SecType = "",
-    expiry: String = "",
-    strike: MoneyType = "",
-    right: Right = "",
-    multiplier: String = "",
-    exchange: String = "",
+      conId: ConId = "",
+      symbol: String = "",
+      secType: SecType = "",
+      expiry: String = "",
+      strike: MoneyType = "",
+      right: Right = "",
+      multiplier: String = "",
+      exchange: String = "",
 
-    currency: CurrencyType = "",
-    localSymbol: String = "",
-    tradingClass: String = "",
-    primaryExch: String = "",
-    includeExpired: Boolean = "",
+      currency: CurrencyType = "",
+      localSymbol: String = "",
+      tradingClass: String = "",
+      primaryExch: String = "",
+      includeExpired: Boolean = "",
 
-    secIdType: SecIdType = SecIdType.Undefined,
-    secId: String = "",
+      secIdType: SecIdType = SecIdType.Undefined,
+      secId: String = "",
 
-    comboLegsDescrip: String = "",
-    comboLegs: List[ComboLeg] = Nil,
+      comboLegsDescrip: String = "",
+      comboLegs: List[ComboLeg] = Nil,
 
-    underComp: Option[UnderComp] = None) extends DTO {
+      underComp: Option[UnderComp] = None) extends DTO {
 
     override def toString: String = nonDefaultNamedValues
   }
@@ -143,53 +143,53 @@ trait DTOs { this: DomainTypesComponent =>
    * ComboLeg.
    */
   case class ComboLeg(
-    conId: ConId = "",
-    ratio: Int = "",
-    action: Action = "",
-    exchange: String = "",
-    openClose: OpenClose = "",
-    shortSaleSlot: ShortSaleSlot = "",
-    designatedLocation: String = "",
-    exemptCode: Int = -1) extends DTO {
+      conId: ConId = "",
+      ratio: Int = "",
+      action: Action = "",
+      exchange: String = "",
+      openClose: OpenClose = "",
+      shortSaleSlot: ShortSaleSlot = "",
+      designatedLocation: String = "",
+      exemptCode: Int = -1) extends DTO {
 
     override def toString: String = nonDefaultNamedValues
 
   }
 
   case class ContractDetails(
-    summary: Contract = Contract(), // looks weird but intentional - aids homologation.
-    marketName: String = "",
-    minTick: MoneyType = "",
-    priceMagnifier: Int = "",
-    orderTypes: String = "", // parse into EnumSet? NO - put util in Enum class 
-    validExchanges: String = "",
-    underConId: ConId = "",
-    longName: String = "",
-    contractMonth: String = "",
-    industry: String = "",
-    category: String = "",
-    subcategory: String = "",
-    timeZoneId: String = "", // TODO: enum candidate?
-    tradingHours: String = "", // TODO: TimeType? or whatnot...
-    liquidHours: String = "",
-    evRule: String = "",
-    evMultiplier: Double = "",
-    secIdList: List[(String, String)] = Nil,
-    cusip: String = "",
-    ratings: String = "",
-    descAppend: String = "",
-    bondType: String = "",
-    couponType: String = "",
-    callable: Boolean = "",
-    putable: Boolean = "",
-    coupon: MoneyType = "",
-    convertible: Boolean = "",
-    maturity: String = "",
-    issueDate: String = "",
-    nextOptionDate: String = "",
-    nextOptionType: String = "",
-    nextOptionPartial: Boolean = "",
-    notes: String = "") extends DTO {
+      summary: Contract = Contract(), // looks weird but intentional - aids homologation.
+      marketName: String = "",
+      minTick: MoneyType = "",
+      priceMagnifier: Int = "",
+      orderTypes: String = "", // parse into EnumSet? NO - put util in Enum class 
+      validExchanges: String = "",
+      underConId: ConId = "",
+      longName: String = "",
+      contractMonth: String = "",
+      industry: String = "",
+      category: String = "",
+      subcategory: String = "",
+      timeZoneId: String = "", // TODO: enum candidate?
+      tradingHours: String = "", // TODO: TimeType? or whatnot...
+      liquidHours: String = "",
+      evRule: String = "",
+      evMultiplier: Double = "",
+      secIdList: List[(String, String)] = Nil,
+      cusip: String = "",
+      ratings: String = "",
+      descAppend: String = "",
+      bondType: String = "",
+      couponType: String = "",
+      callable: Boolean = "",
+      putable: Boolean = "",
+      coupon: MoneyType = "",
+      convertible: Boolean = "",
+      maturity: String = "",
+      issueDate: String = "",
+      nextOptionDate: String = "",
+      nextOptionType: String = "",
+      nextOptionPartial: Boolean = "",
+      notes: String = "") extends DTO {
 
     override def toString: String = nonDefaultNamedValues
   }
@@ -201,128 +201,128 @@ trait DTOs { this: DomainTypesComponent =>
    */
   case class Order(
 
-    // main order fields
-    orderId: OrderId = "",
-    clientId: Int = "",
-    permId: Int = "",
-    action: Action = "",
-    totalQuantity: Int = "",
-    orderType: OrderType = "",
-    lmtPrice: Option[MoneyType] = "",
-    auxPrice: Option[MoneyType] = "",
+      // main order fields
+      orderId: OrderId = "",
+      clientId: Int = "",
+      permId: Int = "",
+      action: Action = "",
+      totalQuantity: Int = "",
+      orderType: OrderType = "",
+      lmtPrice: Option[MoneyType] = "",
+      auxPrice: Option[MoneyType] = "",
 
-    // extended order fields
-    tif: TimeInForce = "",
-    activeStartTime: String = "",
-    activeStopTime: String = "",
-    ocaGroup: String = "",
-    ocaType: OcaType = "",
-    orderRef: String = "",
-    transmit: Boolean = true,
-    parentId: OrderId = OrderId(0),
-    blockOrder: Boolean = "",
-    sweepToFill: Boolean = "",
-    displaySize: Int = "",
-    triggerMethod: TriggerMethod = "",
-    outsideRth: Boolean = "",
-    hidden: Boolean = "",
-    goodAfterTime: String = "", // FORMAT: 20060505 08:00:00 {time zone}
-    goodTillDate: String = "", // FORMAT: 20060505 08:00:00 {time zone}
-    overridePercentageConstraints: Boolean = "",
-    rule80A: Rule80A = "",
-    allOrNone: Boolean = "",
-    minQty: Option[Int] = "",
-    percentOffset: Option[Double] = "",
-    trailStopPrice: Option[MoneyType] = "",
-    trailingPercent: Option[Double] = "",
+      // extended order fields
+      tif: TimeInForce = "",
+      activeStartTime: String = "",
+      activeStopTime: String = "",
+      ocaGroup: String = "",
+      ocaType: OcaType = "",
+      orderRef: String = "",
+      transmit: Boolean = true,
+      parentId: OrderId = OrderId(0),
+      blockOrder: Boolean = "",
+      sweepToFill: Boolean = "",
+      displaySize: Int = "",
+      triggerMethod: TriggerMethod = "",
+      outsideRth: Boolean = "",
+      hidden: Boolean = "",
+      goodAfterTime: String = "", // FORMAT: 20060505 08:00:00 {time zone}
+      goodTillDate: String = "", // FORMAT: 20060505 08:00:00 {time zone}
+      overridePercentageConstraints: Boolean = "",
+      rule80A: Rule80A = "",
+      allOrNone: Boolean = "",
+      minQty: Option[Int] = "",
+      percentOffset: Option[Double] = "",
+      trailStopPrice: Option[MoneyType] = "",
+      trailingPercent: Option[Double] = "",
 
-    // Financial advisors only 
-    faGroup: String = "",
-    faProfile: String = "",
-    faMethod: AllocationMethod = "",
-    faPercentage: String = "",
+      // Financial advisors only 
+      faGroup: String = "",
+      faProfile: String = "",
+      faMethod: AllocationMethod = "",
+      faPercentage: String = "",
 
-    // Institutional orders only
-    openClose: OrderInstOpenClose = OrderInstOpenClose.OPEN,
-    origin: Origin = Customer,
-    shortSaleSlot: ShortSaleSlot = NA,
-    designatedLocation: String = "", // set when slot=2 only.
-    exemptCode: Int = -1,
+      // Institutional orders only
+      openClose: OrderInstOpenClose = OrderInstOpenClose.OPEN,
+      origin: Origin = Customer,
+      shortSaleSlot: ShortSaleSlot = NA,
+      designatedLocation: String = "", // set when slot=2 only.
+      exemptCode: Int = -1,
 
-    // Institutional orders only
-    discretionaryAmt: Double = "",
-    eTradeOnly: Boolean = "",
-    firmQuoteOnly: Boolean = "",
-    nbboPriceCap: Option[MoneyType] = "",
-    optOutSmartRouting: Boolean = "",
+      // Institutional orders only
+      discretionaryAmt: Double = "",
+      eTradeOnly: Boolean = "",
+      firmQuoteOnly: Boolean = "",
+      nbboPriceCap: Option[MoneyType] = "",
+      optOutSmartRouting: Boolean = "",
 
-    // BOX or VOL ORDERS ONLY
-    auctionStrategy: AuctionStrategy = "",
+      // BOX or VOL ORDERS ONLY
+      auctionStrategy: AuctionStrategy = "",
 
-    // BOX ORDERS ONLY
-    startingPrice: Option[MoneyType] = "",
-    stockRefPrice: Option[MoneyType] = "",
-    delta: Option[MoneyType] = "",
+      // BOX ORDERS ONLY
+      startingPrice: Option[MoneyType] = "",
+      stockRefPrice: Option[MoneyType] = "",
+      delta: Option[MoneyType] = "",
 
-    // pegged to stock or VOL orders
-    stockRangeLower: Option[MoneyType] = "",
-    stockRangeUpper: Option[MoneyType] = "",
+      // pegged to stock or VOL orders
+      stockRangeLower: Option[MoneyType] = "",
+      stockRangeUpper: Option[MoneyType] = "",
 
-    // VOLATILITY ORDERS ONLY
-    volatility: Option[Double] = "",
-    volatilityType: VolType = "", // subtle bug in ib code: int on rec but intMax on send
-    continuousUpdate: Int = "",
-    referencePriceType: ReferencePriceType = "", // same ib bug as VolType above
+      // VOLATILITY ORDERS ONLY
+      volatility: Option[Double] = "",
+      volatilityType: VolType = "", // subtle bug in ib code: int on rec but intMax on send
+      continuousUpdate: Int = "",
+      referencePriceType: ReferencePriceType = "", // same ib bug as VolType above
 
-    deltaNeutralOrderType: OrderType = "",
-    deltaNeutralAuxPrice: Option[MoneyType] = "",
-    deltaNeutralConId: ConId = "",
-    deltaNeutralSettlingFirm: String = "",
-    deltaNeutralClearingAccount: String = "",
-    deltaNeutralClearingIntent: String = "",
-    deltaNeutralOpenClose: String = "", // TODO: no clear documentation on acceptable values
-    deltaNeutralShortSale: Boolean = "",
-    deltaNeutralShortSaleSlot: ShortSaleSlot = NA,
-    deltaNeutralDesignatedLocation: String = "",
+      deltaNeutralOrderType: OrderType = "",
+      deltaNeutralAuxPrice: Option[MoneyType] = "",
+      deltaNeutralConId: ConId = "",
+      deltaNeutralSettlingFirm: String = "",
+      deltaNeutralClearingAccount: String = "",
+      deltaNeutralClearingIntent: String = "",
+      deltaNeutralOpenClose: String = "", // TODO: no clear documentation on acceptable values
+      deltaNeutralShortSale: Boolean = "",
+      deltaNeutralShortSaleSlot: ShortSaleSlot = NA,
+      deltaNeutralDesignatedLocation: String = "",
 
-    // COMBO ORDERS ONLY
-    basisPoints: Option[Double] = "",
-    basisPointsType: Option[Int] = "", // TODO: should be enum. IB documentation?!
+      // COMBO ORDERS ONLY
+      basisPoints: Option[Double] = "",
+      basisPointsType: Option[Int] = "", // TODO: should be enum. IB documentation?!
 
-    // SCALE ORDERS ONLY
-    scaleInitLevelSize: Option[Int] = "",
-    scaleSubsLevelSize: Option[Int] = "",
-    scalePriceIncrement: Option[MoneyType] = "",
-    scalePriceAdjustValue: Option[MoneyType] = "",
-    scalePriceAdjustInterval: Option[Int] = "",
-    scaleProfitOffset: Option[MoneyType] = "",
-    scaleAutoReset: Boolean = "",
-    scaleInitPosition: Option[Int] = "",
-    scaleInitFillQty: Option[Int] = "",
-    scaleRandomPercent: Boolean = "",
-    scaleTable: String = "",
+      // SCALE ORDERS ONLY
+      scaleInitLevelSize: Option[Int] = "",
+      scaleSubsLevelSize: Option[Int] = "",
+      scalePriceIncrement: Option[MoneyType] = "",
+      scalePriceAdjustValue: Option[MoneyType] = "",
+      scalePriceAdjustInterval: Option[Int] = "",
+      scaleProfitOffset: Option[MoneyType] = "",
+      scaleAutoReset: Boolean = "",
+      scaleInitPosition: Option[Int] = "",
+      scaleInitFillQty: Option[Int] = "",
+      scaleRandomPercent: Boolean = "",
+      scaleTable: String = "",
 
-    // HEDGE ORDERS ONLY
-    hedgeType: HedgeType = "",
-    hedgeParam: String = "", // TODO: IB has this as String, should be double?!
+      // HEDGE ORDERS ONLY
+      hedgeType: HedgeType = "",
+      hedgeParam: String = "", // TODO: IB has this as String, should be double?!
 
-    // Clearing info
-    account: String = "",
-    settlingFirm: String = "",
-    clearingAccount: String = "",
-    clearingIntent: ClearingIntent = "",
+      // Clearing info
+      account: String = "",
+      settlingFirm: String = "",
+      clearingAccount: String = "",
+      clearingIntent: ClearingIntent = "",
 
-    // ALGO ORDERS ONLY
-    algoStrategy: AlgoStrategy = "",
-    algoParams: List[(String, String)] = Nil,
+      // ALGO ORDERS ONLY
+      algoStrategy: AlgoStrategy = "",
+      algoParams: List[(String, String)] = Nil,
 
-    whatIf: Boolean = "",
-    notHeld: Boolean = "",
+      whatIf: Boolean = "",
+      notHeld: Boolean = "",
 
-    // Smart combo routing params
-    smartComboRoutingParams: List[(String, String)] = Nil,
+      // Smart combo routing params
+      smartComboRoutingParams: List[(String, String)] = Nil,
 
-    orderComboLegs: List[OrderComboLeg] = Nil) extends DTO {
+      orderComboLegs: List[OrderComboLeg] = Nil) extends DTO {
 
     override def toString: String = nonDefaultNamedValues
   }
@@ -338,46 +338,46 @@ trait DTOs { this: DomainTypesComponent =>
   }
 
   case class CommissionReport( //
-    execId: String = "",
-    commission: MoneyType = "",
-    currency: CurrencyType = "",
-    realizedPNL: MoneyType = "",
-    `yield`: Double = "", // TODO: revisit name - unfortunate keyword collision
-    yieldRedemptionDate: Int // YYYYMMDD format	TODO: date type?
-    ) extends DTO {
+      execId: String = "",
+      commission: MoneyType = "",
+      currency: CurrencyType = "",
+      realizedPNL: MoneyType = "",
+      `yield`: Double = "", // TODO: revisit name - unfortunate keyword collision
+      yieldRedemptionDate: Int // YYYYMMDD format	TODO: date type?
+      ) extends DTO {
     override def toString: String = nonDefaultNamedValues
   }
 
   case class Execution(
 
-    orderId: OrderId = "",
-    clientId: Int = "", // TODO: clientId as a GenId?
-    execId: String = "",
-    time: String = "", // TODO: time format?
-    acctNumber: String = "",
-    exchange: String = "",
-    side: ExecAction = "",
-    shares: Int = "",
-    price: MoneyType = "",
-    permId: Int = "", // FIXME: PermId should be GenId opaque
-    liquidation: Int = "", // TODO: is this effectively a Boolean?
-    cumQty: Int = "",
-    avgPrice: MoneyType = "",
-    orderRef: String = "",
-    evRule: String = "",
-    evMultiplier: Double = "") extends DTO {
+      orderId: OrderId = "",
+      clientId: Int = "", // TODO: clientId as a GenId?
+      execId: String = "",
+      time: String = "", // TODO: time format?
+      acctNumber: String = "",
+      exchange: String = "",
+      side: ExecAction = "",
+      shares: Int = "",
+      price: MoneyType = "",
+      permId: Int = "", // FIXME: PermId should be GenId opaque
+      liquidation: Int = "", // TODO: is this effectively a Boolean?
+      cumQty: Int = "",
+      avgPrice: MoneyType = "",
+      orderRef: String = "",
+      evRule: String = "",
+      evMultiplier: Double = "") extends DTO {
 
     override def toString: String = nonDefaultNamedValues
   }
 
   case class ExecutionFilter(
-    clientId: Int = "",
-    acctCode: String = "",
-    time: String = "", // TODO: format? Time type?
-    symbol: String = "",
-    secType: SecType = "",
-    exchange: String = "",
-    side: Action = "") extends DTO {
+      clientId: Int = "",
+      acctCode: String = "",
+      time: String = "", // TODO: format? Time type?
+      symbol: String = "",
+      secType: SecType = "",
+      exchange: String = "",
+      side: Action = "") extends DTO {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -389,15 +389,15 @@ trait DTOs { this: DomainTypesComponent =>
    * Order state is only a field of an IncomingMessage, so there are no default values.
    */
   case class OrderState(
-    status: OrderStatusEnum = "",
-    initMargin: String = "",
-    maintMargin: String = "",
-    equityWithLoan: String = "",
-    commission: Option[MoneyType] = "",
-    minCommission: Option[MoneyType] = "",
-    maxCommission: Option[MoneyType] = "",
-    commissionCurrency: CurrencyType = "",
-    warningText: String = "") extends DTO {
+      status: OrderStatusEnum = "",
+      initMargin: String = "",
+      maintMargin: String = "",
+      equityWithLoan: String = "",
+      commission: Option[MoneyType] = "",
+      minCommission: Option[MoneyType] = "",
+      maxCommission: Option[MoneyType] = "",
+      commissionCurrency: CurrencyType = "",
+      warningText: String = "") extends DTO {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -416,27 +416,27 @@ trait DTOs { this: DomainTypesComponent =>
    * ... but: can you use lists?
    */
   case class ScannerSubscription(
-    numberOfRows: Int = ScannerSubscription.NO_ROW_NUMBER_SPECIFIED,
-    instrument: String = "",
-    locationCode: String = "",
-    scanCode: String = "",
-    abovePrice: Option[MoneyType] = None,
-    belowPrice: Option[MoneyType] = None,
-    aboveVolume: Option[Int] = None,
-    averageOptionVolumeAbove: Option[Int] = None,
-    marketCapAbove: Option[MoneyType] = None,
-    marketCapBelow: Option[MoneyType] = None,
-    moodyRatingAbove: String = "",
-    moodyRatingBelow: String = "",
-    spRatingAbove: String = "",
-    spRatingBelow: String = "",
-    maturityDateAbove: String = "",
-    maturityDateBelow: String = "",
-    couponRateAbove: Option[Double] = None,
-    couponRateBelow: Option[Double] = None,
-    excludeConvertible: String = "",
-    scannerSettingPairs: String = "",
-    stockTypeFilter: String = "") extends DTO {
+      numberOfRows: Int = ScannerSubscription.NO_ROW_NUMBER_SPECIFIED,
+      instrument: String = "",
+      locationCode: String = "",
+      scanCode: String = "",
+      abovePrice: Option[MoneyType] = None,
+      belowPrice: Option[MoneyType] = None,
+      aboveVolume: Option[Int] = None,
+      averageOptionVolumeAbove: Option[Int] = None,
+      marketCapAbove: Option[MoneyType] = None,
+      marketCapBelow: Option[MoneyType] = None,
+      moodyRatingAbove: String = "",
+      moodyRatingBelow: String = "",
+      spRatingAbove: String = "",
+      spRatingBelow: String = "",
+      maturityDateAbove: String = "",
+      maturityDateBelow: String = "",
+      couponRateAbove: Option[Double] = None,
+      couponRateBelow: Option[Double] = None,
+      excludeConvertible: String = "",
+      scannerSettingPairs: String = "",
+      stockTypeFilter: String = "") extends DTO {
 
     override def toString: String = nonDefaultNamedValues
   }

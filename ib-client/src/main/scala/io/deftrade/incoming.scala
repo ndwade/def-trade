@@ -54,6 +54,12 @@ private[deftrade] object IncomingMessages {
   }
 }
 
+// FIXME: nonDefaultNamedValues everywhere!!!
+// indent: need to use "; " as sep rather than ';' due to use of semicolon in tradingHours param
+
+// todo: different exchanges have different accepted orders for the same contract. Results in 
+// multiple ContractDetailsCont messages for the same security. Different liquid hours as well.
+
 trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent with DTOs with OutgoingMessages =>
 
   import NonDefaultNamedValues.nonDefaultNamedValues
@@ -333,7 +339,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     val code = 46
     def read(implicit input: DataInputStream): Unit = {
       rdz // unused version field
-      subs publish TickGeneric(tickerId = rdz, tickType = rdz, value = rdz)
+      subs publish TickString(tickerId = rdz, tickType = rdz, value = rdz)
     }
   }
 

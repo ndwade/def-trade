@@ -79,7 +79,7 @@ trait ConfigSettings {
  * Implements the IbConnection actor, which manages the connection to TWS.
  */
 abstract class IbConnectionComponent(val system: ActorSystem)
-  extends SubscriptionsComponent with DTOs with IncomingMessages with OutgoingMessages with ConfigSettings {
+    extends SubscriptionsComponent with DTOs with IncomingMessages with OutgoingMessages with ConfigSettings {
 
   _: DomainTypesComponent =>
 
@@ -445,7 +445,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
     type Quotas = Queue[Int]
 
     final class ApiMsgThrottler private (dest: ActorRef, msgsPerSec: Int, intervalsPerSec: Int)
-      extends Actor with Stash with LoggingFSM[State, Quotas] {
+        extends Actor with Stash with LoggingFSM[State, Quotas] {
 
       // divide a second into equal intervals
       import scala.concurrent.duration._

@@ -53,4 +53,6 @@ object StandAloneRandomCrap {
 
   // ... TO BE CONTINUED...
 
+  val x = collection.mutable.ArrayBuffer(4096)
+  val a = x.toArray
 }

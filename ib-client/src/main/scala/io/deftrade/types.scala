@@ -211,3 +211,46 @@ trait IbDomainTypesComponent extends DomainTypesComponent {
   val CurrencyType = CurrencyTypeClass[CurrencyType]
 
 }
+
+object Xtras {
+  
+    final class Money(val amount: BigDecimal) extends AnyVal {
+  
+    import Money._
+    
+    override def toString: String = if (amount < 0) amount formatted neg else amount formatted pos
+    def formatted(format: String ): String = amount formatted format
+
+    def + (that: Money): Money = Money(amount + that.amount)
+    def - (that: Money): Money = Money(amount - that.amount)
+
+    def * (that: Double): Money = Money(amount * that)
+    def / (that: Money): Double = (amount / that.amount).toDouble
+    
+    def unary_- : Money = Money(-amount)
+  }
+  
+  object Money {
+  
+    val zero = Money(0)
+    val one = Money(1)
+    
+    private val tot = 16
+    private val frac = 6
+    private val neg = s" %(,$tot.${frac}f"
+    private val pos = s"%,$tot.${frac}f "
+    
+    def apply(amount: BigDecimal): Money = new Money(amount)
+
+    implicit val ordering = Ordering by { (m: Money) => m.amount }
+
+    object Implicits {
+      implicit class FromInt(val i: Int) extends AnyVal { def money: Money = Money(i) }
+      implicit class FromBigDecimal(val i: BigDecimal) extends AnyVal { def money: Money = Money(i) }
+      implicit class FromDouble(val i: Double) extends AnyVal { def money: Money = Money(i) }
+      implicit class FromLong(val i: Long) extends AnyVal { def money: Money = Money(i) }
+    }
+    
+  }
+
+}

@@ -2,6 +2,8 @@
 # sbt
 #
 .cache
+.cache-main
+.cache-tests
 .history
 .lib/
 dist/*
@@ -88,5 +90,5 @@ $RECYCLE.BIN/
 ib-client/src/test/java/com/ib/
 
 # Random files go here
-**/.scratch/
-**/logs/
+.scratch/
+logs/

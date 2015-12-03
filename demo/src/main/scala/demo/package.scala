@@ -36,7 +36,7 @@ package object demo {
         become {
           case msg: IncomingMessage =>
             val ts = timestampFormat.format(new java.util.Date())
-            ps.println(s"$ts -> ${msg.indent}")
+            ps.println(s"$ts -> ${msg}")
         }
         whenStopping { ps.close() }
       }
@@ -62,7 +62,6 @@ package object demo {
     val fileActor = psAct(ps, filename)
     clazzs map { subs.subscribe(fileActor, _) } reduce { _ & _ }
 
-    // FIXME: handles shouldn't leak; should close the files - maybe listen for disconnect?
   }
 
   def defaultMsgHandling(): Boolean = Seq(

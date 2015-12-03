@@ -10,7 +10,7 @@ lazy val buildSettings = buildLicenseSettings ++ Seq(
 
     // TODO: check - parallelExecution in Test := false // will this work?
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-    resolvers ++= Seq(typesafeReleases)
+    resolvers ++= Seq(typesafeReleases, pathikrit)
   )
 
 lazy val buildLicenseSettings = {
