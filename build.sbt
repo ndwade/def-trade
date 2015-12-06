@@ -17,7 +17,7 @@ lazy val buildLicenseSettings = {
   import com.banno.license.Plugin.LicenseKeys._
   import com.banno.license.Licenses._
   licenseSettings ++ Seq(
-    license := apache2("Copyright 2014 Panavista Technologies, LLC"),
+    license := apache2("Copyright 2014-2016 Panavista Technologies, LLC"),
     removeExistingHeaderBlock := true,
     licenseTests := true
   )
@@ -41,7 +41,7 @@ lazy val ibClient = (project in file ("ib-client")).
   settings(buildSettings: _*).
   settings(
     libraryDependencies ++=
-      Seq(parserCombinators, akka) ++
+      Seq(xml, parserCombinators, akka, akkaStream) ++
       Seq(scalatest, testkit).map(_ % Test),
     testGrouping in Test := singleTests((definedTests in Test).value)
   )

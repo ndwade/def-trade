@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -103,4 +103,3 @@ object ReqId extends GenIdCompanion[ReqId] {
  */
 case class ConId(val id: Int) extends /* AnyVal with */ GenId
 object ConId extends GenIdCompanion[ConId]
-

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,6 +102,11 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   trait OrderManagementMessage extends ApiMessage
   trait AccountMessage extends ApiMessage
 
+  // anything that can be sent in response to a TickType specified in ReqMktData
+  trait RawTickMessage extends MarketDataMessage
+  
+  trait MarketDepthMessage extends MarketDataMessage // (for regular and L2)
+  
   /**
    * Signals TWS connection status change - or attempted change.
    */
@@ -252,9 +257,11 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
 
   import MktDataType._
   /**
-   *
+   * This message signals a switch between real-time and frozen data.
+   * It is delivered per data subscription and should be folded in to the stream response,
+   * to be acted on programmatically per stream.
    */
-  case class MarketDataType(reqId: ReqId, marketDataType: MktDataType) extends SystemMessage {
+  case class MarketDataType(reqId: ReqId, marketDataType: MktDataType) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -265,7 +272,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
       subs publish MarketDataType(reqId = rdz, marketDataType = rdz)
     }
   }
-
+  
   /**
    * TODO: Make an XmlType parameter
    */
@@ -285,7 +292,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    *
    */
   case class TickPrice(tickerId: ReqId, field: TickType, price: MoneyType, canAutoExecute: Boolean)
-    extends MarketDataMessage {
+    extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object TickPrice {
@@ -308,7 +315,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
       Map(BID -> BID_SIZE, ASK -> ASK_SIZE, LAST -> LAST_SIZE) withDefaultValue INVALID
   }
 
-  case class TickSize(tickerId: ReqId, field: TickType, size: Int) extends MarketDataMessage {
+  case class TickSize(tickerId: ReqId, field: TickType, size: Int) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object TickSize {
@@ -319,7 +326,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
-  case class TickGeneric(tickerId: ReqId, tickType: TickType, value: Double) extends MarketDataMessage {
+  case class TickGeneric(tickerId: ReqId, tickType: TickType, value: Double) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -331,7 +338,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
-  case class TickString(tickerId: ReqId, tickType: TickType, value: String) extends MarketDataMessage {
+  case class TickString(tickerId: ReqId, tickType: TickType, value: String) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -411,7 +418,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    */
   case class TickEFP(tickerId: ReqId, tickType: TickType, basisPoints: Double,
     formattedBasisPoints: String, impliedFuture: MoneyType, holdDays: Int,
-    futureExpiry: String, dividendImpact: Double, dividendsToExpiry: MoneyType) extends MarketDataMessage {
+    futureExpiry: String, dividendImpact: Double, dividendsToExpiry: MoneyType) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   case object TickEFP {
@@ -427,7 +434,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   /**
    *
    */
-  case class TickSnapshotEnd(reqId: ReqId) extends MarketDataMessage {
+  case class TickSnapshotEnd(reqId: ReqId) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   case object TickSnapshotEnd {
@@ -461,7 +468,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   import DeepSide.DeepSide
 
   case class UpdateMktDepth(tickerId: ReqId, position: Int, operation: DeepType,
-    side: DeepSide, price: MoneyType, size: Int) extends MarketDataMessage {
+    side: DeepSide, price: MoneyType, size: Int) extends MarketDepthMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateMktDepth {
@@ -474,7 +481,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   }
 
   case class UpdateMktDepthL2(tickerId: ReqId, position: Int, marketMaker: String,
-    operation: DeepType, side: DeepSide, price: MoneyType, size: Int) extends MarketDataMessage {
+    operation: DeepType, side: DeepSide, price: MoneyType, size: Int) extends MarketDepthMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateMktDepthL2 {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,7 +81,7 @@ private[deftrade] trait RxTxOrdinal extends RxOrdinal with TxOrdinal { _: Enumer
 private[deftrade] trait RxString extends ResiliantRx { _: Enumeration =>
   import RxString._
   override final protected def deserialize(s: String) =
-    if (isEmptyStringOrAlias(s)) withName("")	// treat '?' or "0" as empty string -> IB sends this, dunno why
+    if (isEmptyStringOrAlias(s)) withName("") // treat '?' or "0" as empty string -> IB sends this, dunno why
     else withName(s)
   // id is negative for errors. OK because id is a map key, not an array index
   private[this] var errId = 0 // only for use within unexpected() method.
@@ -99,7 +99,7 @@ private[deftrade] object RxString {
   /**
    * Values observed to be equivalent based on messages received from the IB server.
    */
-  def isEmptyStringOrAlias(s: String): Boolean = s == "" || s == "?" || s == "0"  
+  def isEmptyStringOrAlias(s: String): Boolean = s == "" || s == "?" || s == "0"
 }
 
 private[deftrade] trait TxString extends TxApi { _: Enumeration =>
@@ -195,7 +195,7 @@ object OrderType extends Enumeration with HasUndefined with RxTxString {
   val TRAIL_REL_PLUS_MKT = Value("TRAIL REL + MKT")
   val VOL = Value("VOL")
   val VWAP = Value("VWAP")
-  val NONE = Value("None")	// observed for Order.deltaNeutralOrderType
+  val NONE = Value("None") // observed for Order.deltaNeutralOrderType
 }
 
 object TimeInForce extends Enumeration with HasUndefined with RxTxString {
@@ -332,7 +332,6 @@ object ExecAction extends Enumeration with HasUndefined with RxString {
   val BOT, SLD = Value
 }
 
-
 // FIXME: LIVE_EXCH / DEAD_EXCH is backwards from what is specified in the API guide.
 object NewsType extends Enumeration with HasUndefined with RxOrdinal {
   type NewsType = Value
@@ -451,12 +450,12 @@ object FundamentalType extends Enumeration with TxString {
   //  val Estimates = Value("estimates")
   //  val FinancialStatements = Value("finstat")
   //  val Summary = Value("snapshot")
-//  val ReportSnapshot = Value("Company overview")
-//  val ReportsFinSummary = Value("Financial summary")
-//  val ReporRatios = Value("Financial ratios")
-//  val ReportsFinStatements = Value("Financial statements")
-//  val RESC = Value("Analyst estimates")
-//  val CalendarReport = Value("Company calendar")
+  //  val ReportSnapshot = Value("Company overview")
+  //  val ReportsFinSummary = Value("Financial summary")
+  //  val ReporRatios = Value("Financial ratios")
+  //  val ReportsFinStatements = Value("Financial statements")
+  //  val RESC = Value("Analyst estimates")
+  //  val CalendarReport = Value("Company calendar")
   val ReportSnapshot = Value
   val ReportsFinSummary = Value
   val ReportRatios = Value
@@ -465,20 +464,44 @@ object FundamentalType extends Enumeration with TxString {
   val CalendarReport = Value
 }
 
+object WhatToShow extends Enumeration with HasUndefined with TxString {
+  type WhatToShow = Value
+  val TRADES, MIDPOINT, BID, ASK = Value // << only these are valid for real-time bars
+  val BID_ASK, HISTORICAL_VOLATILITY, OPTION_IMPLIED_VOLATILITY, YIELD_ASK, YIELD_BID, YIELD_BID_ASK, YIELD_LAST = Value
+}
 
 // TODO: these are used with Historical data - larger issue of how to do time (Joda?)
 // may want to leave this for the service level
 // tricky issues - just do manually?
-//object BarSize
 //object DurationUnit
+//	public static enum DurationUnit {
+//		SECOND, DAY, WEEK, MONTH, YEAR;
+//	}
 
+object BarSize extends Enumeration with TxString {
+  type BarSize = Value
+  val _1_secs = Value("1 secs")
+  val _5_secs = Value("5 secs")
+  val _10_secs = Value("10 secs")
+  val _15_secs = Value("15 secs")
+  val _30_secs = Value("30 secs")
+  val _1_min = Value("1 min")
+  val _2_mins = Value("2 mins")
+  val _3_mins = Value("3 mins")
+  val _5_mins = Value("5 mins")
+  val _10_mins = Value("10 mins")
+  val _15_mins = Value("15 mins")
+  val _20_mins = Value("20 mins")
+  val _30_mins = Value("30 mins")
+  val _1_hour = Value("1 hour")
+  val _4_hours = Value("4 hours")
+  val _1_day = Value("1 day")
+  val _1_week = Value("1 week")
+}
 
 // TODO: object ComboParam
 
 // TODO: object FADataType // FA not yet supported
-
-// TODO:
-//object WhatToShow
 
 /*
  * Optional enums
