@@ -62,7 +62,7 @@ class EWrapperBase extends EWrapper {
   def updateMktDepthL2(x$1: Int, x$2: Int, x$3: String, x$4: Int, x$5: Int, x$6: Double, x$7: Int): Unit = ???
   def updateNewsBulletin(x$1: Int, x$2: Int, x$3: String, x$4: String): Unit = ???
   def updatePortfolio(x$1: com.ib.client.Contract, x$2: Int, x$3: Double, x$4: Double, x$5: Double, x$6: Double, x$7: Double, x$8: String): Unit = ???
-  def position(x$1: String, x$2: Contract, x$3: Int, x$4: Double): Unit = ???
+  def position(x$1: String, x$2: com.ib.client.Contract, x$3: Int, x$4: Double): Unit = ???
   def positionEnd(): Unit = ???
   def accountSummary(x$1: Int, x$2: String, x$3: String, x$4: String, x$5: String): Unit = ???
   def accountSummaryEnd(x$1: Int): Unit = ???

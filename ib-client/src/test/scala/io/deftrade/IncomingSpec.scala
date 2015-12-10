@@ -41,16 +41,16 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def error(id: Int, errorCode: Int, errorMsg: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(e.eid =~= id)
-                  assert(e.errorCode =~= errorCode)
-                  assert(e.errorMsg =~= errorMsg)
+                  assert(e.eid =#= id)
+                  assert(e.errorCode =#= errorCode)
+                  assert(e.errorMsg =#= errorMsg)
                 }
               }
               override def error(errorMsg: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(e.eid =~= -1)
-                  assert(e.errorCode =~= -1)
-                  assert(e.errorMsg =~= errorMsg)
+                  assert(e.eid =#= -1)
+                  assert(e.errorCode =#= -1)
+                  assert(e.errorMsg =#= errorMsg)
                 }
               }
             }
@@ -64,7 +64,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def nextValidId(orderId: Int): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(nvi.orderId =~= orderId)
+                  assert(nvi.orderId =#= orderId)
                 }
               }
             }
@@ -78,8 +78,8 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def contractDetails(reqId: Int, cd: IbContractDetails): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(cdc.reqId =~= reqId)
-                  assert(cdc.contractDetails =~= cd)
+                  assert(cdc.reqId =#= reqId)
+                  assert(cdc.contractDetails =#= cd)
                 }
               }
             }
@@ -92,7 +92,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def contractDetailsEnd(reqId: Int): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(cde.reqId =~= reqId)
+                  assert(cde.reqId =#= reqId)
                 }
               }
             }
@@ -105,8 +105,8 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def bondContractDetails(reqId: Int, cd: IbContractDetails): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(bcd.reqId =~= reqId)
-                  assert(bcd.contract =~= cd)
+                  assert(bcd.reqId =#= reqId)
+                  assert(bcd.contract =#= cd)
                 }
               }
             }
@@ -120,10 +120,10 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
               override def openOrder(
                 orderId: Int, contract: IbContract, order: IbOrder, orderState: IbOrderState): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(oo.orderId =~= orderId)
-                  assert(oo.contract =~= contract)
-                  assert(oo.order =~= order)
-                  assert(oo.orderState =~= orderState)
+                  assert(oo.orderId =#= orderId)
+                  assert(oo.contract =#= contract)
+                  assert(oo.order =#= order)
+                  assert(oo.orderState =#= orderState)
                 }
               }
             }
@@ -148,9 +148,9 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def execDetails(reqId: Int, contract: IbContract, exec: IbExecution): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(ed.reqId =~= reqId)
-                  assert(ed.contract =~= contract)
-                  assert(ed.exec =~= exec)
+                  assert(ed.reqId =#= reqId)
+                  assert(ed.contract =#= contract)
+                  assert(ed.exec =#= exec)
                 }
               }
             }
@@ -167,16 +167,16 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                 parentId: Int, lastFillPrice: Double,
                 clientId: Int, whyHeld: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(os.orderId =~= orderId)
-                  assert(os.status =~= status)
-                  assert(os.filled =~= filled)
-                  assert(os.remaining =~= remaining)
-                  assert(os.avgFillPrice =~= avgFillPrice)
-                  assert(os.permId =~= permId)
-                  assert(os.parentId =~= parentId)
-                  assert(os.lastFillPrice =~= lastFillPrice)
-                  assert(os.clientId =~= clientId)
-                  assert(os.whyHeld =~= whyHeld)
+                  assert(os.orderId =#= orderId)
+                  assert(os.status =#= status)
+                  assert(os.filled =#= filled)
+                  assert(os.remaining =#= remaining)
+                  assert(os.avgFillPrice =#= avgFillPrice)
+                  assert(os.permId =#= permId)
+                  assert(os.parentId =#= parentId)
+                  assert(os.lastFillPrice =#= lastFillPrice)
+                  assert(os.clientId =#= clientId)
+                  assert(os.whyHeld =#= whyHeld)
                 }
               }
             }
@@ -190,12 +190,12 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
               override def updateMktDepth(tickerId: Int, position: Int, operation: Int,
                 side: Int, price: Double, size: Int): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(umd.tickerId =~= tickerId)
-                  assert(umd.position =~= position)
-                  assert(umd.operation =~= operation)
-                  assert(umd.side =~= side)
-                  assert(umd.price =~= price)
-                  assert(umd.size =~= size)
+                  assert(umd.tickerId =#= tickerId)
+                  assert(umd.position =#= position)
+                  assert(umd.operation =#= operation)
+                  assert(umd.side =#= side)
+                  assert(umd.price =#= price)
+                  assert(umd.size =#= size)
                 }
               }
             }
@@ -210,13 +210,13 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                 marketMaker: String,
                 operation: Int, side: Int, price: Double, size: Int): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(umd2.tickerId =~= tickerId)
-                  assert(umd2.position =~= position)
-                  assert(umd2.marketMaker =~= marketMaker)
-                  assert(umd2.operation =~= operation)
-                  assert(umd2.side =~= side)
-                  assert(umd2.price =~= price)
-                  assert(umd2.size =~= size)
+                  assert(umd2.tickerId =#= tickerId)
+                  assert(umd2.position =#= position)
+                  assert(umd2.marketMaker =#= marketMaker)
+                  assert(umd2.operation =#= operation)
+                  assert(umd2.side =#= side)
+                  assert(umd2.price =#= price)
+                  assert(umd2.size =#= size)
                 }
               }
             }
@@ -229,9 +229,9 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def tickSize(tickerId: Int, field: Int, size: Int): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(ts.tickerId =~= tickerId)
-                  assert(ts.field =~= field)
-                  assert(ts.size =~= size)
+                  assert(ts.tickerId =#= tickerId)
+                  assert(ts.field =#= field)
+                  assert(ts.size =#= size)
                 }
               }
             }
@@ -248,15 +248,15 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                 futureExpiry: String,
                 dividendImpact: Double, dividendsToExpiry: Double): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(ts.tickerId =~= tickerId)
-                  assert(ts.tickType =~= tickType)
-                  assert(ts.basisPoints =~= basisPoints)
-                  assert(ts.formattedBasisPoints =~= formattedBasisPoints)
-                  assert(ts.impliedFuture =~= impliedFuture)
-                  assert(ts.holdDays =~= holdDays)
-                  assert(ts.futureExpiry =~= futureExpiry)
-                  assert(ts.dividendImpact =~= dividendImpact)
-                  assert(ts.dividendsToExpiry =~= dividendsToExpiry)
+                  assert(ts.tickerId =#= tickerId)
+                  assert(ts.tickType =#= tickType)
+                  assert(ts.basisPoints =#= basisPoints)
+                  assert(ts.formattedBasisPoints =#= formattedBasisPoints)
+                  assert(ts.impliedFuture =#= impliedFuture)
+                  assert(ts.holdDays =#= holdDays)
+                  assert(ts.futureExpiry =#= futureExpiry)
+                  assert(ts.dividendImpact =#= dividendImpact)
+                  assert(ts.dividendsToExpiry =#= dividendsToExpiry)
                 }
               }
             }
@@ -271,10 +271,10 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
               override def updateNewsBulletin(msgId: Int, msgType: Int, message: String,
                 origExchange: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(unb.msgId =~= msgId)
-                  assert(unb.msgType =~= msgType)
-                  assert(unb.message =~= message)
-                  assert(unb.origExchange =~= origExchange)
+                  assert(unb.msgId =#= msgId)
+                  assert(unb.msgType =#= msgType)
+                  assert(unb.message =#= message)
+                  assert(unb.origExchange =#= origExchange)
                 }
               }
             }
@@ -287,8 +287,8 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def fundamentalData(reqId: Int, data: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(fd.reqId =~= reqId)
-                  assert(fd.data =~= data)
+                  assert(fd.reqId =#= reqId)
+                  assert(fd.data =#= data)
                 }
               }
             }
@@ -301,8 +301,8 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def deltaNeutralValidation(reqId: Int, underComp: IbUnderComp): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(dnv.reqId =~= reqId)
-                  assert(dnv.underComp =~= underComp)
+                  assert(dnv.reqId =#= reqId)
+                  assert(dnv.underComp =#= underComp)
                 }
               }
             }
@@ -315,8 +315,8 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def marketDataType(reqId: Int, marketDataType: Int): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(mdt.reqId =~= reqId)
-                  assert(mdt.marketDataType =~= marketDataType)
+                  assert(mdt.reqId =#= reqId)
+                  assert(mdt.marketDataType =#= marketDataType)
                 }
               }
             }
@@ -329,10 +329,10 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def tickPrice(tickerId: Int, field: Int, price: Double, canAutoExecute: Int) {
                 asyncAssertionBlock(w) {
-                  assert(tp.tickerId =~= tickerId)
-                  assert(tp.field =~= field)
-                  assert(tp.price =~= price)
-                  assert(tp.canAutoExecute =~= (canAutoExecute != 0))
+                  assert(tp.tickerId =#= tickerId)
+                  assert(tp.field =#= field)
+                  assert(tp.price =#= price)
+                  assert(tp.canAutoExecute =#= (canAutoExecute != 0))
                 }
               }
               override def tickSize(tickerId: Int, field: Int, size: Int): Unit = {
@@ -340,9 +340,9 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                   ots match {
                     case Some(ts) =>
                       log.info("Got {}", ts)
-                      assert(ts.tickerId =~= tickerId)
-                      assert(ts.field =~= field)
-                      assert(ts.size =~= size)
+                      assert(ts.tickerId =#= tickerId)
+                      assert(ts.field =#= field)
+                      assert(ts.size =#= size)
                     case None => fail("EWrapper.tickSize() called when no TickSize msg received")
                   }
                 }
@@ -375,16 +375,16 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                     log.info("toc={}", toc)
 
                     asyncAssertionBlock(w) {
-                      assert(toc.tickerId =~= tickerId)
-                      assert(toc.field =~= field)
-                      assert(toc.impliedVol =~= impliedVol)
-                      assert(toc.delta =~= delta)
-                      assert(toc.optPrice =~= optPrice)
-                      assert(toc.pvDividend =~= pvDividend)
-                      assert(toc.gamma =~= gamma)
-                      assert(toc.vega =~= vega)
-                      assert(toc.theta =~= theta)
-                      assert(toc.undPrice =~= undPrice)
+                      assert(toc.tickerId =#= tickerId)
+                      assert(toc.field =#= field)
+                      assert(toc.impliedVol =#= impliedVol)
+                      assert(toc.delta =#= delta)
+                      assert(toc.optPrice =#= optPrice)
+                      assert(toc.pvDividend =#= pvDividend)
+                      assert(toc.gamma =#= gamma)
+                      assert(toc.vega =#= vega)
+                      assert(toc.theta =#= theta)
+                      assert(toc.undPrice =#= undPrice)
                     }
                   }
                 }
@@ -393,8 +393,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
     }
     "deserialize HistoricalData homologous with EReader given explicit test vector" in {
       import ImplicitConversions._
-      //      import MoneyType.implicitConversions._
-      import CurrencyType.implicitConversions._
+      import Currency._
       val runs: List[(Int, Seq[String], Seq[Seq[String]])] = List(
         (1,
           List(ReqId(111), /*"19990401", "19990402",*/ 5),
@@ -421,24 +420,24 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                       val hd = hds(i)
                       log.debug("hd={}", hd)
                       asyncAssertionBlock(w) {
-                        assert(hd.reqId =~= reqId)
-                        assert(hd.date =~= date)
-                        assert(hd.open =~= open)
-                        assert(hd.high =~= high)
-                        assert(hd.low =~= low)
-                        assert(hd.close =~= close)
-                        assert(hd.volume =~= volume)
-                        assert(hd.count =~= count)
-                        assert(hd.WAP =~= WAP)
-                        assert(hd.hasGaps =~= hasGaps)
+                        assert(hd.reqId =#= reqId)
+                        assert(hd.date =#= date)
+                        assert(hd.open =#= open)
+                        assert(hd.high =#= high)
+                        assert(hd.low =#= low)
+                        assert(hd.close =#= close)
+                        assert(hd.volume =#= volume)
+                        assert(hd.count =#= count)
+                        assert(hd.WAP =#= WAP)
+                        assert(hd.hasGaps =#= hasGaps)
                         i += 1
                       }
                     } else {
                       asyncAssertionBlock(w) {
                         val dates = if (version >= 2) date split "-" drop 1 else Array("", "")
-                        assert(hde.reqId =~= reqId)
-                        assert(hde.startDate =~= dates(0))
-                        assert(hde.endDate =~= dates(1))
+                        assert(hde.reqId =#= reqId)
+                        assert(hde.startDate =#= dates(0))
+                        assert(hde.endDate =#= dates(1))
                         assert(i === hds.size)
                         ended = true // happens-before invocation of waiter.dismiss()
                       }
@@ -458,10 +457,10 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
               override def updateAccountValue(key: String, value: String, currency: String,
                 accountName: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(uav.key =~= key)
-                  assert(uav.value =~= value)
-                  assert(uav.currency =~= currency)
-                  assert(uav.accountName =~= accountName)
+                  assert(uav.key =#= key)
+                  assert(uav.value =#= value)
+                  assert(uav.currency =#= currency)
+                  assert(uav.accountName =#= accountName)
                 }
               }
             }
@@ -477,14 +476,14 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                 marketValue: Double, averageCost: Double, unrealizedPNL: Double,
                 realizedPNL: Double, accountName: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(up.contract =~= contract)
-                  assert(up.position =~= position)
-                  assert(up.marketPrice =~= marketPrice)
-                  assert(up.marketValue =~= marketValue)
-                  assert(up.averageCost =~= averageCost)
-                  assert(up.unrealizedPNL =~= unrealizedPNL)
-                  assert(up.realizedPNL =~= realizedPNL)
-                  assert(up.accountName =~= accountName)
+                  assert(up.contract =#= contract)
+                  assert(up.position =#= position)
+                  assert(up.marketPrice =#= marketPrice)
+                  assert(up.marketValue =#= marketValue)
+                  assert(up.averageCost =#= averageCost)
+                  assert(up.unrealizedPNL =#= unrealizedPNL)
+                  assert(up.realizedPNL =#= realizedPNL)
+                  assert(up.accountName =#= accountName)
                 }
               }
             }
@@ -498,7 +497,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def scannerParameters(xml: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(sp.xml =~= xml)
+                  assert(sp.xml =#= xml)
                 }
               }
             }
@@ -511,7 +510,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def updateAccountTime(timeStamp: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(uat.timeStamp =~= timeStamp)
+                  assert(uat.timeStamp =#= timeStamp)
                 }
               }
             }
@@ -524,7 +523,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
             new EWrapperCallbacks(w) {
               override def accountDownloadEnd(accountName: String): Unit = {
                 asyncAssertionBlock(w) {
-                  assert(ade.accountName =~= accountName)
+                  assert(ade.accountName =#= accountName)
                 }
               }
             }
@@ -533,7 +532,7 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
     "deserialize ScannerData homologous with EReader given explicit test vector" in {
       import ImplicitConversions._
       //      import MoneyType.implicitConversions._
-      import CurrencyType.implicitConversions._
+      import Currency._
       val runs: List[(Int, Seq[String], Seq[Seq[String]])] = List(
         (1,
           List(ReqId(333), 5),
@@ -564,19 +563,19 @@ class IncomingSpec extends IncomingSpecBase("IncomingSpec") {
                     val sd = sds(i)
                     log.debug("sd={}", sd)
                     asyncAssertionBlock(w) {
-                      assert(sd.reqId =~= reqId)
-                      assert(sd.rank =~= rank)
-                      assert(sd.contractDetails =~= contractDetails)
-                      assert(sd.distance =~= distance)
-                      assert(sd.benchmark =~= benchmark)
-                      assert(sd.projection =~= projection)
-                      assert(sd.legsStr =~= legsStr)
+                      assert(sd.reqId =#= reqId)
+                      assert(sd.rank =#= rank)
+                      assert(sd.contractDetails =#= contractDetails)
+                      assert(sd.distance =#= distance)
+                      assert(sd.benchmark =#= benchmark)
+                      assert(sd.projection =#= projection)
+                      assert(sd.legsStr =#= legsStr)
                       i += 1
                     }
                   }
                   override def scannerDataEnd(reqId: Int) {
                     asyncAssertionBlock(w) {
-                      assert(sde.reqId =~= reqId)
+                      assert(sde.reqId =#= reqId)
                       assert(i === sds.size)
                       ended = true // happens-before invocation of waiter.dismiss()
                     }

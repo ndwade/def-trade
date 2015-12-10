@@ -499,17 +499,11 @@ object BarSize extends Enumeration with TxString {
   val _1_week = Value("1 week")
 }
 
+object Currency extends Enumeration with HasUndefined with RxTxString {
+  type Currency = Value
+  val USD, AUD, CAD, CHF, CNY, DKK, EUR, GBP, HKD, HUF, ILS, JPY, MXN, NOK, NZD, SEK, SGD, KRW = Value
+}
 // TODO: object ComboParam
 
 // TODO: object FADataType // FA not yet supported
 
-/*
- * Optional enums
- */
-object optional extends {
-
-  object Currency extends Enumeration with HasUndefined {
-    type Currency = Value
-    val USD, AUD, CAD, CHF, CNY, DKK, EUR, GBP, HKD, HUF, ILS, JPY, MXN, NOK, NZD, SEK, SGD, KRW = Value
-  }
-}

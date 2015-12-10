@@ -79,10 +79,8 @@ trait ConfigSettings {
  * Implements the IbConnection actor, which manages the connection to TWS.
  */
 abstract class IbConnectionComponent(val system: ActorSystem)
-    extends SubscriptionsComponent with DTOs with IncomingMessages with OutgoingMessages with ConfigSettings {
-
-  _: DomainTypesComponent =>
-
+    extends SubscriptionsComponent with IncomingMessages with OutgoingMessages with ConfigSettings {
+  
   /**
    * Configuration settings - read only.
    */

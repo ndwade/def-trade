@@ -32,13 +32,9 @@ import org.reactivestreams.Publisher
  * ReqScannerParameters (based on config params) - hold in a well know location as XML
  * ReqAccountUpdates() etc (based on config params) - sets up service for Account, Positions etc.
  */
-trait SystemManager { self: DTOs with IncomingMessages =>
-  implicit class PublisherToFuture[Msg](p: Publisher[Msg]) {
-    def toFuture: Future[List[Msg]] = {
-      // start a SubscriberActor which will receive stream, fulfill Promise on completion 
-      ???
-    }
-  }
+trait SystemManager { self: IncomingMessages =>
+
+  def connect(): Either[IbConnectError, IbConnectOk]
   
   def scannerParameters: xml.Document
   
@@ -47,9 +43,18 @@ trait SystemManager { self: DTOs with IncomingMessages =>
   // TODO: idea: a message bus for exchanges; subscribe to an exchange and get available / not available
   // also: for data farms
   
+  // general utility
+  implicit class PublisherToFuture[Msg](p: Publisher[Msg]) {
+    def toFuture: Future[List[Msg]] = {
+      // start a SubscriberActor which will receive stream, fulfill Promise on completion 
+      ???
+    }
+  }
+  
+  
 }
 
-trait ReferenceData { self: DTOs with IncomingMessages =>
+trait ReferenceData { self: IncomingMessages =>
   
   // Will often be used with .toFuture, but want to allow for streaming directly into DB
   def contractDetails(contract: Contract): Publisher[ContractDetails]
@@ -59,7 +64,7 @@ trait ReferenceData { self: DTOs with IncomingMessages =>
   // careful not to parse XML on socket receiver thread
   def fundamentals(contract: Contract): Future[xml.Document]
 }
-trait MarketData { self: DTOs with IncomingMessages =>
+trait MarketData { self: IncomingMessages =>
 
   def ticks(contract: Contract, genericTickList: List[GenericTickType.GenericTickType], snapshot: Boolean = false): Publisher[RawTickMessage]
 
@@ -78,7 +83,7 @@ trait MarketData { self: DTOs with IncomingMessages =>
   def news(): Publisher[Nothing] = ???
 }
 
-trait HistoricalData { self: DTOs with IncomingMessages =>
+trait HistoricalData { self: IncomingMessages =>
   import BarSize._
   import WhatToShow._
 
@@ -100,7 +105,12 @@ trait HistoricalData { self: DTOs with IncomingMessages =>
 }
 
 
-// TODO: should calculate the 1/20 ratio of executed orders per order/order-mod
+//IB measures the effectiveness of client orders through the Order Efficiency Ratio (OER).  This ratio compares aggregate daily order activity relative to that portion of activity which results in an execution and is determined as follows:
+//
+// 
+//
+//OER = (Order Submissions + Order Revisions + Order Cancellations) / (Executed Orders + 1)
+
 // see http://ibkb.interactivebrokers.com/article/1765
 trait OrderManager {
   def cancelAll(): Unit

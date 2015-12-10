@@ -18,6 +18,12 @@ package io {
   /**
    * global notes
    * 
+   * 
+   * cake structure: ib module needs to accept the actor system as a parameter -
+   * therefore config, pubsub, and all actors within ib - and all transitive dependencies - 
+   * must be baked in the same cake. This includes IncomingMessages and OutgoingMessages, but not
+   * DTOs.
+   *  
    * moar new ideas 11/17/15
    * 
    * usage seems to fall into some distinct request/response patterns.
@@ -27,7 +33,7 @@ package io {
    *  - bars
    *  - market depth
    *  * frozen indicator - akin to synthetic timeout inactivity warnings (tap tap this thing on?)
-   *  - Fundamental data?! Yes, appears to be. Veryify.
+   *  - Fundamental data?! Yes, appears to be. Verify.
    *  - Historical data - special handling; end must be calculated.
    *  - news bullitins
    *  
@@ -38,6 +44,7 @@ package io {
    *  - contractDetails and BondContractDetails
    *  
    *  Stream of Aggregates - explicit Cancel, Explicit End Response
+   *  (not sure about this - thinking these are pure streams)
    *  - account value
    *  - Account summary
    *  - positions
@@ -53,7 +60,7 @@ package io {
    *   DISPLAY GROUPS -> wtfc
    *  
    *
-   * Clean layering: ib client should be usable without service layer
+   * Clean layering: ib client should be *testable* against java api without service layer
    * Services layer should be usable without persistence schema.
    *
    * Services:
@@ -68,6 +75,7 @@ package io {
    *
    * Error routing: happens at Service layer. Services subscribe to all error messages
    * and keep Map[Id, ActorRef] to further route errors.
+   * Stream type parameter needs to comprehend errors!
    *
    * IDs:
    * - policy is set in the services layer
@@ -123,7 +131,7 @@ package io {
 
     implicit def im2indent[A <: IncomingMessages#IncomingMessage](a: A) = new Indentable[A](a)
     implicit def om2indent[A <: OutgoingMessages#OutgoingMessage](a: A) = new Indentable[A](a)
-    implicit def dtoindent[A <: DTOs#DTO](a: A) = new Indentable[A](a)
+    implicit def dtoindent[A <: DTO](a: A) = new Indentable[A](a)
 
   }
 }

@@ -18,7 +18,7 @@ package io.deftrade
 import reflect.runtime.{ universe => ru }
 import org.scalatest.Assertions.fail
 
-trait IbApiUtils {
+trait IbApiUtils { self =>
 
   type ErrorMessage = String
   type HmVal = List[ErrorMessage]
@@ -59,7 +59,7 @@ trait IbApiUtils {
 
   implicit class Homologizer(x: Any) {
 
-    def =~=(y: Any)(implicit context: String = x.getClass.getSimpleName()): HmVal = {
+    def =#=(y: Any)(implicit context: String = x.getClass.getSimpleName()): HmVal = {
 
       x match {
 
@@ -87,13 +87,13 @@ trait IbApiUtils {
               x === s
           }
         // deal with type Either[OrderId, ReqId]
-        case scala.util.Left(oid) => oid =~= y
-        case scala.util.Right(rid) => rid =~= y
+        case scala.util.Left(oid) => oid =#= y
+        case scala.util.Right(rid) => rid =#= y
 
         case ReqId(id) => id + ReqId.offset === y
         case g: GenId => g.id === y
 
-        case Some(xx) => xx =~= y
+        case Some(xx) => xx =#= y
 
         case None => y match {
           case i: Int => Int.MaxValue === y
@@ -102,7 +102,7 @@ trait IbApiUtils {
         }
         case (tag, value) =>
           val tvy = y.asInstanceOf[com.ib.client.TagValue]
-          acc(tag =~= tvy.m_tag, value =~= tvy.m_value)
+          acc(tag =#= tvy.m_tag, value =#= tvy.m_value)
 
         case list: List[_] => (list, y.asInstanceOf[java.util.Vector[_]]) match {
           case (Nil, null) => good
@@ -110,7 +110,7 @@ trait IbApiUtils {
           case (_, vy) =>
             if (list.length != vy.size()) bad(s"lengths don't match for $list, $vy") else {
               list.zipWithIndex.foldLeft(good) { (b, a) =>
-                a match { case (x, i) => acc(b, x =~= vy.get(i)) }
+                a match { case (x, i) => acc(b, x =#= vy.get(i)) }
               }
             }
         }
@@ -125,7 +125,7 @@ trait IbApiUtils {
             val xx = imx.reflectField(sym.asTerm).get
             val ySym = yTpe.decl(ru.TermName(s"m_${sym.name}".trim))
             val yy = imy.reflectField(ySym.asTerm).get
-            xx =~= yy
+            xx =#= yy
           }
           ret.foldLeft(good)(acc)
         }
@@ -253,10 +253,11 @@ trait IbApiUtils {
       val enumModule = enumType.typeSymbol.asClass.module.asModule
       val e = m.reflectModule(enumModule).instance.asInstanceOf[Enumeration]
       oneOf(e.values.toArray)
-    } else if (tpe <:< typeOf[DTOs#DTO]) {
+    } else if (tpe <:< typeOf[DTO]) {
       //      println(s"DTO type: $tpe")
       val cts = tpe.decl(termNames.CONSTRUCTOR).asMethod
-      val cm = outer.reflectClass(tpe.typeSymbol.asClass)
+//      val cm = outer.reflectClass(tpe.typeSymbol.asClass)
+      val cm = ru.runtimeMirror(self.getClass.getClassLoader).reflectClass(tpe.typeSymbol.asClass)
       val ctorMirror = cm.reflectConstructor(cts)
       val params = cts.paramLists.head map { sym => { generate(sym.typeSignature) } }
       // println(s"finished gathering params for ${tpe}: $params")

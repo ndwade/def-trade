@@ -41,7 +41,7 @@ abstract class ConnectionSpecBase(_system: ActorSystem) extends TestKit(_system)
    */
   val serverVersion = 69 // current version - should be param?
 
-  object IB extends IbConnectionComponent(system) with IbDomainTypesComponent
+  object IB extends IbConnectionComponent(system)
   import IB._
 
   final val server = new TestServer(system)
@@ -378,7 +378,7 @@ abstract class OutgoingSpecBase(_system: ActorSystem) extends ConnectionSpecBase
   def genDtoAndIbHomolog[D](implicit td: Homolog[D]): (D, td.IbType) = {
     val dtoGenerated = generate(td.tpe)
     val ibDtoGenerated = ibCopyOf(dtoGenerated)
-    assert(dtoGenerated =~= ibDtoGenerated)
+    assert(dtoGenerated =#= ibDtoGenerated)
     (dtoGenerated.asInstanceOf[D], ibDtoGenerated.asInstanceOf[td.IbType])
   }
 

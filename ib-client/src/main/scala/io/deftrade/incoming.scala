@@ -60,15 +60,11 @@ private[deftrade] object IncomingMessages {
 // todo: different exchanges have different accepted orders for the same contract. Results in 
 // multiple ContractDetailsCont messages for the same security. Different liquid hours as well.
 
-trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent with DTOs with OutgoingMessages =>
+trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
 
   import NonDefaultNamedValues.nonDefaultNamedValues
 
   import ImplicitConversions._
-  import MoneyType.implicitConversions._
-  import MoneyType.ordering
-  import MoneyType.ordering._
-  import CurrencyType.implicitConversions._
 
   import IncomingMessages._
 
@@ -104,9 +100,9 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
 
   // anything that can be sent in response to a TickType specified in ReqMktData
   trait RawTickMessage extends MarketDataMessage
-  
+
   trait MarketDepthMessage extends MarketDataMessage // (for regular and L2)
-  
+
   /**
    * Signals TWS connection status change - or attempted change.
    */
@@ -125,7 +121,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     msg: IbConnect,
     serverVersion: Int,
     twsTime: String)
-    extends IbConnectionMessage {
+      extends IbConnectionMessage {
   }
 
   /**
@@ -138,7 +134,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     sender: ActorRef,
     msg: IbConnect,
     ex: Option[Throwable] = None)
-    extends IbConnectionMessage with ErrorMessage {
+      extends IbConnectionMessage with ErrorMessage {
   }
   object IbConnectError {
     val Redundant = "Already connected"
@@ -148,7 +144,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   case class IbDisconnectOk(
     reason: String,
     sender: ActorRef) // the sender of the EDisconnect message
-    extends IbConnectionMessage {
+      extends IbConnectionMessage {
   }
 
   /**
@@ -163,7 +159,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     sender: Option[ActorRef] = None,
     msg: Option[OutgoingMessage] = None, // the OutgoingMessage that caused the disconnect
     ex: Option[Throwable] = None) // the exception that caused the disconnect
-    extends IbConnectionMessage with ErrorMessage {
+      extends IbConnectionMessage with ErrorMessage {
   }
   object IbDisconnectError {
     val Redundant = "Already disconnected"
@@ -181,7 +177,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     sender: ActorRef,
     msg: OutgoingMessage,
     ex: Option[Throwable] = None)
-    extends ErrorMessage { // Neither ConnectionMessage nor ApiMessage
+      extends ErrorMessage { // Neither ConnectionMessage nor ApiMessage
   }
 
   object OutgoingError {
@@ -194,7 +190,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    * Codes and messages should be considered part of the API specification. Note this is the only
    * place where the TWS API notion of "error codes" is retained.
    */
-//  case class Error(id: Int, errCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
+  //  case class Error(id: Int, errCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
   case class Error(eid: Either[OrderId, ReqId], errorCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -242,7 +238,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
 
   import NewsType.NewsType
   case class UpdateNewsBulletin(msgId: Int, msgType: NewsType, message: String,
-    origExchange: String) extends SystemMessage {
+      origExchange: String) extends SystemMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -272,7 +268,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
       subs publish MarketDataType(reqId = rdz, marketDataType = rdz)
     }
   }
-  
+
   /**
    * TODO: Make an XmlType parameter
    */
@@ -291,8 +287,8 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   /**
    *
    */
-  case class TickPrice(tickerId: ReqId, field: TickType, price: MoneyType, canAutoExecute: Boolean)
-    extends RawTickMessage {
+  case class TickPrice(tickerId: ReqId, field: TickType, price: Double, canAutoExecute: Boolean)
+      extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object TickPrice {
@@ -351,16 +347,16 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   }
 
   case class TickOptionComputation(
-    tickerId: ReqId,
-    field: TickType,
-    impliedVol: Option[Double],
-    delta: Option[Double],
-    optPrice: Option[MoneyType],
-    pvDividend: Option[MoneyType],
-    gamma: Option[Double],
-    vega: Option[Double],
-    theta: Option[Double],
-    undPrice: Option[MoneyType]) extends MarketDataMessage {
+      tickerId: ReqId,
+      field: TickType,
+      impliedVol: Option[Double],
+      delta: Option[Double],
+      optPrice: Option[Double],
+      pvDividend: Option[Double],
+      gamma: Option[Double],
+      vega: Option[Double],
+      theta: Option[Double],
+      undPrice: Option[Double]) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -368,32 +364,24 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
 
     val code = 21
 
-    class Constrained[D: Ordering](d2d: Double => D)(implicit val s2d: String => D) {
-      val o = implicitly[Ordering[D]]
-      import o._
-      implicit val id2d = d2d
-      def nonNeg(d: D): Boolean = d >= 0.0
-      def magSubOne(d: D): Boolean = (-1.0: D) < d && d < 1.0
-    }
-    implicit val mto = MoneyType.ordering
-    implicit val constrainedMoneyType = new Constrained[MoneyType](MoneyType.fromDouble)
-    implicit val constrainedDoubleType = new Constrained[Double](identity)
+    type Constraint = Double => Boolean
+    private val nonNeg: Constraint = _ >= 0.0
+    private val magSubOne: Constraint = d => (-1.0) < d && d < 1.0
 
     def read(implicit input: DataInputStream): Unit = {
 
-      def rdzConstrained[D](constraint: D => Boolean)(implicit ec: Constrained[D]) = {
-        import ec.s2d
-        val d: D = rdz
+      def rdzConstrained(constraint: Constraint) = {
+        val d: Double = rdz
         if (constraint(d)) Some(d) else None
       }
-      def rdzConstrainedIf[D: Constrained](pred: Boolean)(constraint: D => Boolean) =
+      def rdzConstrainedIf(pred: Boolean)(constraint: Constraint) =
         if (pred) rdzConstrained(constraint) else None
 
-      def rdzNonNeg[D: Constrained] = rdzConstrained(implicitly[Constrained[D]].nonNeg)
-      def rdzMagSubOne[D: Constrained] = rdzConstrained(implicitly[Constrained[D]].magSubOne)
+      def rdzNonNeg = rdzConstrained(nonNeg)
+      def rdzMagSubOne = rdzConstrained(magSubOne)
 
-      def rdzNonNegIf[D: Constrained](pred: Boolean) = rdzConstrainedIf(pred)(implicitly[Constrained[D]].nonNeg)
-      def rdzMagSubOneIf[D: Constrained](pred: Boolean) = rdzConstrainedIf(pred)(implicitly[Constrained[D]].magSubOne)
+      def rdzNonNegIf(pred: Boolean) = rdzConstrainedIf(pred)(nonNeg)
+      def rdzMagSubOneIf(pred: Boolean) = rdzConstrainedIf(pred)(magSubOne)
 
       val version: Int = rdz // unused version field
       val tickerId = rdz
@@ -402,23 +390,22 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
       subs publish TickOptionComputation(
         tickerId = tickerId,
         field = tickType,
-        impliedVol = rdzNonNeg[Double],
-        delta = rdzMagSubOne[Double],
-        optPrice = rdzNonNegIf[MoneyType](version >= 6 || tickType == TickType.MODEL_OPTION),
-        pvDividend = rdzNonNegIf[MoneyType](version >= 6 || tickType == TickType.MODEL_OPTION),
-        gamma = rdzMagSubOneIf[Double](version >= 6),
-        vega = rdzMagSubOneIf[Double](version >= 6),
-        theta = rdzMagSubOneIf[Double](version >= 6),
-        undPrice = rdzNonNegIf[MoneyType](version >= 6))
+        impliedVol = rdzNonNeg,
+        delta = rdzMagSubOne,
+        optPrice = rdzNonNegIf(version >= 6 || tickType == TickType.MODEL_OPTION),
+        pvDividend = rdzNonNegIf(version >= 6 || tickType == TickType.MODEL_OPTION),
+        gamma = rdzMagSubOneIf(version >= 6),
+        vega = rdzMagSubOneIf(version >= 6),
+        theta = rdzMagSubOneIf(version >= 6),
+        undPrice = rdzNonNegIf(version >= 6))
     }
   }
-
   /**
    *
    */
   case class TickEFP(tickerId: ReqId, tickType: TickType, basisPoints: Double,
-    formattedBasisPoints: String, impliedFuture: MoneyType, holdDays: Int,
-    futureExpiry: String, dividendImpact: Double, dividendsToExpiry: MoneyType) extends RawTickMessage {
+      formattedBasisPoints: String, impliedFuture: Double, holdDays: Int,
+      futureExpiry: String, dividendImpact: Double, dividendsToExpiry: Double) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   case object TickEFP {
@@ -449,8 +436,8 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    *
    */
   case class RealTimeBar(tickerId: ReqId, time: Long,
-    open: MoneyType, high: MoneyType, low: MoneyType, close: MoneyType,
-    volume: Long, wap: MoneyType, count: Int) extends MarketDataMessage {
+      open: Double, high: Double, low: Double, close: Double,
+      volume: Long, wap: Double, count: Int) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -468,7 +455,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   import DeepSide.DeepSide
 
   case class UpdateMktDepth(tickerId: ReqId, position: Int, operation: DeepType,
-    side: DeepSide, price: MoneyType, size: Int) extends MarketDepthMessage {
+      side: DeepSide, price: Double, size: Int) extends MarketDepthMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateMktDepth {
@@ -481,7 +468,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
   }
 
   case class UpdateMktDepthL2(tickerId: ReqId, position: Int, marketMaker: String,
-    operation: DeepType, side: DeepSide, price: MoneyType, size: Int) extends MarketDepthMessage {
+      operation: DeepType, side: DeepSide, price: Double, size: Int) extends MarketDepthMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateMktDepthL2 {
@@ -499,7 +486,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    */
   case class ScannerData(reqId: ReqId, rank: Int, contractDetails: ContractDetails,
     distance: String, benchmark: String, projection: String, legsStr: String)
-    extends MarketDataMessage {
+      extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -537,9 +524,9 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    *
    */
   case class HistoricalData(
-    reqId: ReqId, date: String,
-    open: MoneyType, high: MoneyType, low: MoneyType, close: MoneyType,
-    volume: Int, count: Int, WAP: Double, hasGaps: Boolean) extends HistoricalDataMessage {
+      reqId: ReqId, date: String,
+      open: Double, high: Double, low: Double, close: Double,
+      volume: Int, count: Int, WAP: Double, hasGaps: Boolean) extends HistoricalDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -588,7 +575,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    *
    */
   case class ContractDetailsCont(reqId: ReqId, contractDetails: ContractDetails)
-    extends ReferenceDataMessage {
+      extends ReferenceDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object ContractDetailsCont {
@@ -609,8 +596,8 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
         summary = Contract(
           symbol = symbol, secType = secType, expiry = expiry, strike = strike, right = right,
           exchange = exchange, currency = currency, localSymbol = localSymbol,
-           tradingClass = tradingClass,
-           conId = conId, multiplier = multiplier, primaryExch = primaryExch),
+          tradingClass = tradingClass,
+          conId = conId, multiplier = multiplier, primaryExch = primaryExch),
         marketName = marketName, minTick = minTick,
         orderTypes = orderTypes, validExchanges = validExchanges, priceMagnifier = priceMagnifier,
         underConId = underConId, longName = longName, contractMonth = contractMonth,
@@ -674,7 +661,7 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    *
    */
   case class OpenOrder(orderId: OrderId, contract: Contract, order: Order, orderState: OrderState)
-    extends OrderManagementMessage {
+      extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -770,8 +757,8 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
         else { rdz; scaleInitLevelSize = rdz }
         scalePriceIncrement = rdz
       }
-      val _c1 = version >= 28 && ((scalePriceIncrement: Option[MoneyType]) map {
-        _ > MoneyType.zero
+      val _c1 = version >= 28 && ((scalePriceIncrement: Option[Double]) map {
+        _ > 0.0
       } getOrElse false)
       val scalePriceAdjustValue, scalePriceAdjustInterval, scaleProfitOffset = rdzIf(_c1)
       val scaleAutoReset, scaleInitPosition, scaleInitFillQty, scaleRandomPercent = rdzIf(_c1)
@@ -876,11 +863,11 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
    *
    */
   case class OrderStatus( // FIXME: use some defaults here...
-    orderId: OrderId, status: OrderStatusEnum, filled: Int,
-    remaining: Int, avgFillPrice: MoneyType,
-    permId: Int,
-    parentId: OrderId, lastFillPrice: MoneyType, clientId: Int,
-    whyHeld: String) extends OrderManagementMessage {
+      orderId: OrderId, status: OrderStatusEnum, filled: Int,
+      remaining: Int, avgFillPrice: Double,
+      permId: Int,
+      parentId: OrderId, lastFillPrice: Double, clientId: Int,
+      whyHeld: String) extends OrderManagementMessage {
     // TODO: whyHeld as an enum?
     override def toString: String = nonDefaultNamedValues
   }
@@ -986,11 +973,12 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
+  import Currency._
   /**
    *
    */
-  case class UpdateAccountValue(key: String, value: String, currency: CurrencyType,
-    accountName: String) extends AccountMessage {
+  case class UpdateAccountValue(key: String, value: String, currency: Currency,
+      accountName: String) extends AccountMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateAccountValue {
@@ -1002,9 +990,9 @@ trait IncomingMessages { _: DomainTypesComponent with SubscriptionsComponent wit
     }
   }
 
-  case class UpdatePortfolio(contract: Contract, position: Int, marketPrice: MoneyType,
-    marketValue: MoneyType, averageCost: MoneyType, unrealizedPNL: MoneyType,
-    realizedPNL: MoneyType, accountName: String) extends AccountMessage {
+  case class UpdatePortfolio(contract: Contract, position: Int, marketPrice: Double,
+      marketValue: Double, averageCost: Double, unrealizedPNL: Double,
+      realizedPNL: Double, accountName: String) extends AccountMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdatePortfolio {

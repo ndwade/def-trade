@@ -62,12 +62,11 @@ private[deftrade] object OutgoingMessages {
 
 }
 
-trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =>
+trait OutgoingMessages { _: ConfigSettings =>
 
   import java.io.{ DataInputStream, OutputStream, IOException }
   import ImplicitConversions._
-  import MoneyType.implicitConversions._
-  import CurrencyType.implicitConversions._
+  import Currency._
 
   import OutgoingMessages._
 
@@ -327,9 +326,8 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
       wrz(order.trailingPercent)
 
       wrz(order.scaleInitLevelSize, order.scaleSubsLevelSize)
-      wrz(order.scalePriceIncrement)
-      import MoneyType.ordering._
-      if (order.scalePriceIncrement map (_ > MoneyType.zero) getOrElse false) {
+      wrz(order.scalePriceIncrement) 
+      if (order.scalePriceIncrement map (_ > 0.0) getOrElse false) {
         wrz(order.scalePriceAdjustValue, order.scalePriceAdjustInterval, order.scaleProfitOffset,
           order.scaleAutoReset, order.scaleInitPosition,
           order.scaleInitFillQty, order.scaleRandomPercent)
@@ -650,8 +648,8 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
 
   case class CalculateImpliedVolatility(reqId: ReqId,
     contract: Contract,
-    optionPrice: MoneyType,
-    underPrice: MoneyType) extends OutgoingMessage {
+    optionPrice: Double,
+    underPrice: Double) extends OutgoingMessage {
 
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
@@ -691,7 +689,7 @@ trait OutgoingMessages { _: DomainTypesComponent with DTOs with ConfigSettings =
   case class CalculateOptionPrice(reqId: ReqId,
     contract: Contract,
     volatility: Double,
-    underPrice: MoneyType) extends OutgoingMessage {
+    underPrice: Double) extends OutgoingMessage {
 
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._

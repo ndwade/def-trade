@@ -19,7 +19,7 @@ import io.deftrade._
 import java.io.{ File, FileOutputStream, PrintStream }
 
 package demo {
-  object Ib extends IbConnectionComponent(ActorSystem("demo")) with IbDomainTypesComponent
+  object Ib extends IbConnectionComponent(ActorSystem("demo"))
 }
 
 package object demo {
@@ -77,12 +77,14 @@ package object demo {
   def connect() = conn ! IbConnect(port = 7496, clientId = 0)
   def disconnect() = conn ! IbDisconnect("all done")
 
-  def stk(symbol: String, exchange: String = "SMART", currency: CurrencyType = CurrencyType.USD) =
+  import Currency.{ Currency, USD }
+
+  def stk(symbol: String, exchange: String = "SMART", currency: Currency = USD) =
     Contract(secType = SecType.STK, symbol = symbol, exchange = exchange, currency = currency)
 
-  def fut(symbol: String, expiry: String, exchange: String = "SMART", currency: CurrencyType = CurrencyType.USD) =
-    Contract(secType = SecType.FUT, symbol = symbol, expiry = expiry, currency = "USD")
+  def fut(symbol: String, expiry: String, exchange: String = "SMART", currency: Currency = USD) =
+    Contract(secType = SecType.FUT, symbol = symbol, expiry = expiry, currency = USD)
 
-  def opt(symbol: String, expiry: String, right: Right, exchange: String = "SMART", currency: CurrencyType = CurrencyType.USD) =
-    Contract(secType = SecType.OPT, symbol = symbol, right = right, expiry = expiry, currency = "USD")
+  def opt(symbol: String, expiry: String, right: Right, exchange: String = "SMART", currency: Currency = USD) =
+    Contract(secType = SecType.OPT, symbol = symbol, right = right, expiry = expiry, currency = USD)
 }

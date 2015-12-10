@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterAll
 
 class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
 
-  object TestIbModule extends DTOs with IbDomainTypesComponent
+  object TestIbModule
 
   import TestIbModule._
   import com.ib.client.{
@@ -42,7 +42,7 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
   def assertDtoGenIbCopyIsHomologous(tpe: Type): Unit = {
     val dtoGenerated = generate(tpe)
     val ibDtoGenerated = ibCopyOf(dtoGenerated)
-    assert(dtoGenerated =~= ibDtoGenerated)
+    assert(dtoGenerated =#= ibDtoGenerated)
   }
 
   "The DTO homologation code" when {
@@ -51,9 +51,9 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
 
         val contractEmpty = Contract()
         val ibContract = ibCopyOf(contractEmpty)
-        assert(contractEmpty =~= ibContract)
-        assert(negate(contractEmpty.copy(includeExpired = true) =~= ibContract))
-        //        println(contractEmpty.copy(includeExpired = true) =~= ibContract)
+        assert(contractEmpty =#= ibContract)
+        assert(negate(contractEmpty.copy(includeExpired = true) =#= ibContract))
+        //        println(contractEmpty.copy(includeExpired = true) =#= ibContract)
 
         val contractNonEmpty = Contract(
           conId = new ConId(555),
@@ -66,16 +66,16 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
           exchange = "new YAWK")
 
         val ibContractNonEmpty = ibCopyOf(contractNonEmpty)
-        assert(contractNonEmpty =~= ibContractNonEmpty)
-        //  println(contractEmpty =~= ibContractNonEmpty)
-        assert(negate(contractEmpty =~= ibContractNonEmpty)) // problem!
+        assert(contractNonEmpty =#= ibContractNonEmpty)
+        //  println(contractEmpty =#= ibContractNonEmpty)
+        assert(negate(contractEmpty =#= ibContractNonEmpty)) // problem!
 
         val contractCombo = Contract.combo("IBRK")(
           ComboLeg(conId = new ConId(12345), ratio = 2, action = Action.BUY, exchange = "ICE"),
           ComboLeg(conId = new ConId(54321), ratio = 3, action = Action.SELL, exchange = "FIRE"))
 
         val ibContractCombo = ibCopyOf(contractCombo)
-        assert(contractCombo =~= ibContractCombo)
+        assert(contractCombo =#= ibContractCombo)
 
         import scala.reflect.runtime.universe.{ typeOf }
         implicit val outer = scala.reflect.runtime.currentMirror.reflect(TestIbModule)
@@ -83,8 +83,8 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
         //        (1 to 100) foreach { _ =>
         val contractGenerated = generate(typeOf[Contract])
         val ibContractGenerated = ibCopyOf(contractGenerated)
-        assert(contractGenerated =~= ibContractGenerated)
-        //        println(contractGenerated =~= ibContractGenerated)
+        assert(contractGenerated =#= ibContractGenerated)
+        //        println(contractGenerated =#= ibContractGenerated)
         //        }
 
       }
@@ -94,8 +94,8 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
 
         val orderEmpty = Order()
         val ibOrderEmpty = ibCopyOf(orderEmpty)
-        // println(orderEmpty =~= ibOrderEmpty)
-        assert(orderEmpty =~= ibOrderEmpty)
+        // println(orderEmpty =#= ibOrderEmpty)
+        assert(orderEmpty =#= ibOrderEmpty)
 
         val orderSimple = Order(
           orderId = new OrderId(42),
@@ -108,9 +108,9 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
           auxPrice = Some(1.95))
 
         val ibOrderSimple = ibCopyOf(orderSimple)
-        assert(orderSimple =~= ibOrderSimple)
-        // println(orderSimple =~= ibOrderEmpty)
-        assert(negate(orderSimple =~= ibOrderEmpty))
+        assert(orderSimple =#= ibOrderSimple)
+        // println(orderSimple =#= ibOrderEmpty)
+        assert(negate(orderSimple =#= ibOrderEmpty))
 
         val orderExt = orderSimple.copy(
           tif = TimeInForce.GTC,
@@ -137,7 +137,7 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
           notHeld = true)
 
         val ibOrderExt = ibCopyOf(orderExt)
-        assert(orderExt =~= ibOrderExt)
+        assert(orderExt =#= ibOrderExt)
 
         val orderCombo = orderExt.copy(
           basisPoints = Some(0.01),
@@ -147,45 +147,45 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
             OrderComboLeg(Some(66.77)), OrderComboLeg(Some(888.88))))
 
         val ibOrderCombo = ibCopyOf(orderCombo)
-        assert(orderCombo =~= ibOrderCombo)
-        // println(orderCombo =~= ibOrderExt)
+        assert(orderCombo =#= ibOrderCombo)
+        // println(orderCombo =#= ibOrderExt)
 
       }
     }
     "run with randomly generated instances against all DTO classes" should {
       "genererate and verify a homologous ib copy of the instances" in {
 
-        assert(Contract() =~= ibCopyOf(Contract()))
+        assert(Contract() =#= ibCopyOf(Contract()))
         assertDtoGenIbCopyIsHomologous(typeOf[Contract])
         assertDtoGenIbCopyIsHomologous(typeOf[Contract])
         assertDtoGenIbCopyIsHomologous(typeOf[Contract])
 
-        assert(Order() =~= ibCopyOf(Order()))
+        assert(Order() =#= ibCopyOf(Order()))
         assertDtoGenIbCopyIsHomologous(typeOf[Order])
         assertDtoGenIbCopyIsHomologous(typeOf[Order])
         assertDtoGenIbCopyIsHomologous(typeOf[Order])
 
-        assert(ContractDetails() =~= ibCopyOf(ContractDetails()))
+        assert(ContractDetails() =#= ibCopyOf(ContractDetails()))
         assertDtoGenIbCopyIsHomologous(typeOf[ContractDetails])
         assertDtoGenIbCopyIsHomologous(typeOf[ContractDetails])
         assertDtoGenIbCopyIsHomologous(typeOf[ContractDetails])
 
-        assert(Execution() =~= ibCopyOf(Execution()))
+        assert(Execution() =#= ibCopyOf(Execution()))
         assertDtoGenIbCopyIsHomologous(typeOf[Execution])
         assertDtoGenIbCopyIsHomologous(typeOf[Execution])
         assertDtoGenIbCopyIsHomologous(typeOf[Execution])
 
-        assert(ExecutionFilter() =~= ibCopyOf(ExecutionFilter()))
+        assert(ExecutionFilter() =#= ibCopyOf(ExecutionFilter()))
         assertDtoGenIbCopyIsHomologous(typeOf[ExecutionFilter])
         assertDtoGenIbCopyIsHomologous(typeOf[ExecutionFilter])
         assertDtoGenIbCopyIsHomologous(typeOf[ExecutionFilter])
 
-        assert(OrderState() =~= ibCopyOf(OrderState()))
+        assert(OrderState() =#= ibCopyOf(OrderState()))
         assertDtoGenIbCopyIsHomologous(typeOf[OrderState])
         assertDtoGenIbCopyIsHomologous(typeOf[OrderState])
         assertDtoGenIbCopyIsHomologous(typeOf[OrderState])
 
-        assert(ScannerSubscription() =~= ibCopyOf(ScannerSubscription()))
+        assert(ScannerSubscription() =#= ibCopyOf(ScannerSubscription()))
         assertDtoGenIbCopyIsHomologous(typeOf[ScannerSubscription])
         assertDtoGenIbCopyIsHomologous(typeOf[ScannerSubscription])
         assertDtoGenIbCopyIsHomologous(typeOf[ScannerSubscription])
@@ -200,11 +200,11 @@ class IbDtoHomologationSpec extends WordSpec with Matchers with IbApiUtils {
         val ibContract = new IbContract()
         ibContract.m_symbol = "99"
         ibContract.m_secType = "98"
-        assert(contract =~= ibContract)
+        assert(contract =#= ibContract)
 
         val contractDetails = ContractDetails()
         val ibContractDetails = new IbContractDetails()
-        assert(contractDetails =~= ibContractDetails)
+        assert(contractDetails =#= ibContractDetails)
       }
     }
   }

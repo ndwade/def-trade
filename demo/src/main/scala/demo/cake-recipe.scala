@@ -18,27 +18,8 @@ package demo
 import akka.actor._
 import io.deftrade._
 import io.deftrade.Action._
-import io.deftrade.optional.Currency.Currency
-import io.deftrade.DefaultTypeClasses.CurrencyEnumClass
-import io.deftrade.DefaultTypeClasses.CurrencyTypeClass
-import io.deftrade.DefaultTypeClasses.MoneyDoubleClass
-import io.deftrade.DefaultTypeClasses.MoneyTypeClass
 
-trait MyDomainTypesComponent extends DomainTypesComponent {
-
-  import optional.{ Currency }
-  import DefaultTypeClasses._
-
-    type MoneyType = BigDecimal
-    val MoneyType = MoneyTypeClass[MoneyType]
-
-    import Currency.Currency
-    type CurrencyType = Currency
-    val CurrencyType = CurrencyTypeClass[CurrencyType]
-
-}
-
-object CustomCakeIb extends IbConnectionComponent(ActorSystem.create("system")) with MyDomainTypesComponent
+object CustomCakeIb extends IbConnectionComponent(ActorSystem.create("system")) 
 
 object StandAloneRandomCrap {
 
@@ -46,7 +27,7 @@ object StandAloneRandomCrap {
 
   import Right._, Action._, SecType._, SecIdType._
 
-  val cost: MoneyType = 99.95
+  val cost: Double = 99.95
   val dcost: BigDecimal = cost
 
   val contract = Contract(symbol = "AAPL")
