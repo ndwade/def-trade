@@ -157,7 +157,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
       val endDateTime = generate[String]
       val durationStr = generate[String]
       val barSizeSetting = generate[String]
-      val whatToShow = generate[String]
+      val whatToShow = generate[WhatToShow.WhatToShow]
       val useRTH = generate[Int]
       val formatDate = generate[DateFormatType.DateFormatType]
       val ibFormatDate = formatDate.id
@@ -227,7 +227,7 @@ class OutgoingSpec extends OutgoingSpecBase("OutgoingSpec") {
       val (tickerId, ibTickerId) = genDtoAndIbHomolog[ReqId]
       val (contract, ibContract) = genDtoAndIbHomolog[Contract]
       val barSize = generate[Int]
-      val whatToShow = generate[String]
+      val whatToShow = generate[WhatToShow.WhatToShow]
       val useRTH = generate[Boolean]
       assertOmWritesEqual(
         ReqRealTimeBars(tickerId, contract,

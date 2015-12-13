@@ -67,7 +67,7 @@ trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
   import ImplicitConversions._
 
   import IncomingMessages._
-
+  
   /**
    * Marker trait for all messages which may be subscribed to from the subs EventBus.
    */
@@ -484,7 +484,7 @@ trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
    * Scanner data is deemed to be Market Data because it is derived from current market quotes,
    * in the much same sense as real time bars are derived from market data.
    */
-  case class ScannerData(reqId: ReqId, rank: Int, contractDetails: ContractDetails,
+  case class ScannerData(val reqId: ReqId, rank: Int, contractDetails: ContractDetails,
     distance: String, benchmark: String, projection: String, legsStr: String)
       extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues

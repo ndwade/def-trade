@@ -80,7 +80,7 @@ trait ConfigSettings {
  */
 abstract class IbConnectionComponent(val system: ActorSystem)
     extends SubscriptionsComponent with IncomingMessages with OutgoingMessages with ConfigSettings {
-  
+
   /**
    * Configuration settings - read only.
    */
@@ -100,10 +100,12 @@ abstract class IbConnectionComponent(val system: ActorSystem)
    * by IB (50 msgs/sec).
    */
   final val conn: ActorRef = {
+
     val rawConn = system.actorOf(
       Props(new IbConnection).
         withDispatcher("deftrade.ibc.connection-dispatcher"),
       name = "ib-conn")
+
     system.actorOf(
       throttle.ApiMsgThrottler.props(dest = rawConn).
         withDispatcher("deftrade.ibc.connection-dispatcher"),
@@ -237,21 +239,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
      */
     when(Connected) {
 
-      /*
-       * Justification for the @unchecked annotation.
-       * the unchecked warning is also suppressed if we use type projection for OutgoingMessage
-       * this is ok because 
-       * - it says _exactly_ what the pattern matcher does - it can't check the outer ref
-       * - is suppresses the following warning:
-       * 	- "The outer reference in this type test cannot be checked at run time"
-       *  	- this is as of scala 2.10.1 - follow up, it's unstable.
-       * - problem is that then case classes expecting Ib.ConnectionComponent.this.OutgoingMessage
-       * don't type check.
-       * So just live with the @unchecked... it's close enough until the scalac issue stabilizes.
-       *   
-       */
-      //      case Event(msg: Messages#OutgoingMessage, Connection(os, _, _)) =>
-      case Event(msg: OutgoingMessage @unchecked, Connection(os, _, IbConnectOk(_, _, sv, _))) =>
+      case Event(msg: OutgoingMessage, Connection(os, _, IbConnectOk(_, _, sv, _))) =>
         import OutgoingError._
         try {
           msg.write(os, sv)

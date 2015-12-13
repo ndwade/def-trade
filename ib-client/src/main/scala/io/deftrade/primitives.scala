@@ -73,33 +73,45 @@ import ImplicitConversions._
  */
 sealed trait GenId extends Any {
   def id: Int
+  def raw: Int = id
 }
 
-sealed trait GenIdCompanion[GID <: GenId] {
+sealed abstract class GenIdCompanion[GID <: GenId](val offset: Int) {
   def apply(id: Int): GID
+  def raw(raw: Int): GID = apply(raw - offset)
   import math.Ordering
   implicit lazy val ordering: Ordering[GID] = Ordering.by[GID, Int](_.id)
   implicit def ops(i: GID) = ordering.mkOrderingOps(i)
-  private[deftrade] implicit def id2s(i: GID) = i.id.toString
-  private[deftrade] implicit def s2id(s: String): GID = apply(s)
+  private[deftrade] implicit def id2s(i: GID) = i.raw.toString
+  private[deftrade] implicit def s2id(s: String): GID = raw(s)
+}
+
+sealed trait AtomicCounter {
+    protected[this] val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+}
+
+sealed trait AtomicSettable extends AtomicCounter {
+  def set(newValue: Int): Unit = counter.set(newValue)
+}
+
+sealed trait AtomicGenerator[GID <: GenId] extends AtomicCounter { self: GenIdCompanion[GID] =>
+  def next(): GID = apply(counter.getAndIncrement())
 }
 
 /**
- * OrderId range is Int.MinVal to 0x3fffffff
+ * OrderId 
  */
-case class OrderId(val id: Int) extends /* AnyVal with */ GenId
-object OrderId extends GenIdCompanion[OrderId]
+case class OrderId(val id: Int) extends AnyVal with GenId
+object OrderId extends GenIdCompanion[OrderId](offset = 0) with AtomicGenerator[OrderId] with AtomicSettable
+
 /**
- * ReqId range is 0x40000000 to 0x7fffffff
+ * ReqId 
  */
-case class ReqId(val id: Int) extends /* AnyVal with */ GenId
-object ReqId extends GenIdCompanion[ReqId] {
-  val offset = 0x40000000
-  override private[deftrade] implicit def id2s(i: ReqId) = (i.id + offset).toString
-  override private[deftrade] implicit def s2id(s: String): ReqId = apply((s: Int) - offset)
-}
+case class ReqId(val id: Int) extends AnyVal with GenId { override def raw: Int = id + ReqId.offset }
+object ReqId extends GenIdCompanion[ReqId](offset = 0x40000000) with AtomicGenerator[ReqId] 
+
 /**
  *
  */
 case class ConId(val id: Int) extends /* AnyVal with */ GenId
-object ConId extends GenIdCompanion[ConId]
+object ConId extends GenIdCompanion[ConId](0)

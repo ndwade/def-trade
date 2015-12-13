@@ -35,14 +35,14 @@ import org.reactivestreams.Publisher
 trait SystemManager { self: IncomingMessages =>
 
   def connect(): Either[IbConnectError, IbConnectOk]
-  
+
   def scannerParameters: xml.Document
-  
+
   def news: Publisher[UpdateNewsBulletin]
-  
+
   // TODO: idea: a message bus for exchanges; subscribe to an exchange and get available / not available
   // also: for data farms
-  
+
   // general utility
   implicit class PublisherToFuture[Msg](p: Publisher[Msg]) {
     def toFuture: Future[List[Msg]] = {
@@ -50,40 +50,49 @@ trait SystemManager { self: IncomingMessages =>
       ???
     }
   }
-  
-  
+
 }
 
 trait ReferenceData { self: IncomingMessages =>
-  
+
   // Will often be used with .toFuture, but want to allow for streaming directly into DB
   def contractDetails(contract: Contract): Publisher[ContractDetails]
-  
+
   // TODO: verify this really has RPC semantics.
   // cancel if timeout?
   // careful not to parse XML on socket receiver thread
   def fundamentals(contract: Contract): Future[xml.Document]
 }
-trait MarketData { self: IncomingMessages =>
+trait MarketData { self: OutgoingMessages with IncomingMessages with Services =>
 
-  def ticks(contract: Contract, genericTickList: List[GenericTickType.GenericTickType], snapshot: Boolean = false): Publisher[RawTickMessage]
+  def ticks(contract: Contract,
+    genericTickList: List[GenericTickType.GenericTickType],
+    snapshot: Boolean = false): Publisher[RawTickMessage] = {
 
-  def bars(contract: Contract): Publisher[RealTimeBar]
+    val reqId = ReqId.next()
+    IbPublisher(ReqMktData(reqId, contract, genericTickList, snapshot), CancelMktData(reqId))
+  }
 
-  def optionPrice(contract: Contract, volatility: Double): Publisher[TickOptionComputation]
+  import WhatToShow.WhatToShow
+  def bars(contract: Contract, whatToShow: WhatToShow): Publisher[RealTimeBar] = {
+    val reqId = ReqId.next()
+    IbPublisher(ReqRealTimeBars(reqId, contract, 5, whatToShow, true), CancelRealTimeBars(reqId))
+  }
 
-  def impliedVolatility(contract: Contract, optionPrice: Double): Publisher[TickOptionComputation]
-  
-  def depth(contract: Contract, rows: Int): Publisher[MarketDepthMessage]
-  
+  def optionPrice(contract: Contract, volatility: Double): Publisher[TickOptionComputation] = ???
+
+  def impliedVolatility(contract: Contract, optionPrice: Double): Publisher[TickOptionComputation] = ???
+
+  def depth(contract: Contract, rows: Int): Publisher[MarketDepthMessage] = ???
+
   def scan(params: ScannerParameters): Future[List[ScannerData]] // TODO: verify RPC semantics
 
   // TODO: deal with requesting news. How is news returned?  
   // See https://www.interactivebrokers.com/en/software/api/apiguide/tables/requestingnews.htm
-  def news(): Publisher[Nothing] = ???
+  def news(): Publisher[Null] = ???
 }
 
-trait HistoricalData { self: IncomingMessages =>
+trait HistoricalData { self: IncomingMessages with OutgoingMessages with Services =>
   import BarSize._
   import WhatToShow._
 
@@ -96,7 +105,20 @@ trait HistoricalData { self: IncomingMessages =>
     duration: jt.Duration,
     barSize: BarSize,
     whatToShow: WhatToShow,
-    regularHoursOnly: Boolean = true): Publisher[HistoricalData]
+    regularHoursOnly: Boolean = true): Publisher[HistoricalData] = {
+
+    val reqId = ReqId.next()
+    IbPublisher(
+      ReqHistoricalData(reqId, contract,
+        end.toString, // FIXME LMAO
+        duration.toString, // FIXME
+        barSize,
+        whatToShow,
+        if (regularHoursOnly) 1 else 0,
+        DateFormatType.SecondsSinceEpoch),
+      CancelHistoricalData(reqId))
+
+  }
 
   // implementation note: the formatDate field is hardwired to 2 (epoch seconds count)
   // the HistoricalData responce data should use DateTimes, not strings. 
@@ -104,15 +126,48 @@ trait HistoricalData { self: IncomingMessages =>
   // testability; and an "opinionated" version for the higher level interface
 }
 
-
-//IB measures the effectiveness of client orders through the Order Efficiency Ratio (OER).  This ratio compares aggregate daily order activity relative to that portion of activity which results in an execution and is determined as follows:
-//
-// 
-//
-//OER = (Order Submissions + Order Revisions + Order Cancellations) / (Executed Orders + 1)
-
+// IB measures the effectiveness of client orders through the Order Efficiency Ratio (OER).  
+// This ratio compares aggregate daily order activity relative to that portion of activity 
+// which results in an execution and is determined as follows:
+// OER = (Order Submissions + Order Revisions + Order Cancellations) / (Executed Orders + 1)
 // see http://ibkb.interactivebrokers.com/article/1765
+
 trait OrderManager {
   def cancelAll(): Unit
+}
+
+trait Services { self: IbConnectionComponent with OutgoingMessages with ConfigSettings =>
+
+  import org.reactivestreams.{ Subscriber, Subscription }
+  import scala.language.existentials
+
+  type Msg = OutgoingMessage with HasReqId
+
+  val streams = collection.concurrent.TrieMap.empty[Int, Subscriber[Any]]
+
+  case class IbPublisher[T](req: Msg, cnc: Msg) extends Publisher[T] {
+    override def subscribe(s: Subscriber[_ >: T]): Unit = {
+      s onSubscribe IbSubscription(s.asInstanceOf[Subscriber[Any]], req, cnc)
+    }
+  }
+
+  case class IbSubscription(s: Subscriber[Any], req: Msg, cnc: Msg) extends Subscription {
+    require(req.reqId == cnc.reqId)
+
+    private var r = (n: Long) => {
+      require(n == Long.MaxValue) // FIXME: log this in production, no assertion  
+      streams += ((req.reqId.raw, s))
+      conn ! req
+    }
+
+    override def request(n: Long): Unit = { r(n); r = _ => () }
+
+    private var c = () => {
+      streams -= req.reqId.raw
+      conn ! cnc
+    }
+    override def cancel(): Unit = { c(); c = () => () }
+  }
+
 }
 

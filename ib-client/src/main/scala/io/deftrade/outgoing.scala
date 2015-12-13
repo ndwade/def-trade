@@ -27,8 +27,8 @@ private[deftrade] object MinServerVer {
   val ScaleTable = 69
 }
 
-private[deftrade] object OutgoingMessages { 
-  
+private[deftrade] object OutgoingMessages {
+
   // TODO: support FA messages
 
   import java.io.{ DataInputStream, OutputStream, IOException }
@@ -71,9 +71,9 @@ trait OutgoingMessages { _: ConfigSettings =>
   import OutgoingMessages._
 
   case class IbConnect(
-      host: String = settings.ibc.host, 
-      port: Int = settings.ibc.port, 
-      clientId: Int = settings.ibc.clientId)
+    host: String = settings.ibc.host,
+    port: Int = settings.ibc.port,
+    clientId: Int = settings.ibc.clientId)
 
   case class IbDisconnect(why: String)
 
@@ -83,6 +83,15 @@ trait OutgoingMessages { _: ConfigSettings =>
    */
   sealed trait OutgoingMessage {
     def write(implicit out: OutputStream, serverVersion: Int): Unit
+  }
+
+  sealed trait HasReqId {
+    def reqId: ReqId
+  }
+
+  sealed trait HasTickerId extends HasReqId {
+    def tickerId: ReqId
+    final override def reqId: ReqId = tickerId
   }
 
   /**
@@ -102,10 +111,10 @@ trait OutgoingMessages { _: ConfigSettings =>
    *
    */
   case class ReqMktData(
-    tickerId: ReqId,
-    contract: Contract,
-    genericTickList: List[GenericTickType],
-    snapshot: Boolean) extends OutgoingMessage {
+      val tickerId: ReqId,
+      contract: Contract,
+      genericTickList: List[GenericTickType],
+      snapshot: Boolean) extends OutgoingMessage with HasTickerId {
 
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
@@ -136,7 +145,7 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   object ReqMktData { val api = (1, 10) }
 
-  case class CancelMktData(tickerId: ReqId) extends OutgoingMessage {
+  case class CancelMktData(val tickerId: ReqId) extends OutgoingMessage with HasTickerId {
     import CancelMktData._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
@@ -256,7 +265,7 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class PlaceOrder(id: OrderId = "", contract: Contract, order: Order)
-    extends OutgoingMessage {
+      extends OutgoingMessage {
 
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
@@ -326,7 +335,7 @@ trait OutgoingMessages { _: ConfigSettings =>
       wrz(order.trailingPercent)
 
       wrz(order.scaleInitLevelSize, order.scaleSubsLevelSize)
-      wrz(order.scalePriceIncrement) 
+      wrz(order.scalePriceIncrement)
       if (order.scalePriceIncrement map (_ > 0.0) getOrElse false) {
         wrz(order.scalePriceAdjustValue, order.scalePriceAdjustInterval, order.scaleProfitOffset,
           order.scaleAutoReset, order.scaleInitPosition,
@@ -430,11 +439,13 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (16, 1)
   }
 
+  import WhatToShow.WhatToShow
+
   case class ReqHistoricalData(reqId: ReqId, contract: Contract,
-    endDateTime: String, durationStr: String,
-    barSizeSetting: String, whatToShow: String,
-    useRTH: Int,
-    formatDate: DateFormatType.DateFormatType) extends OutgoingMessage {
+      endDateTime: String, durationStr: String,
+      barSizeSetting: String, whatToShow: WhatToShow,
+      useRTH: Int,
+      formatDate: DateFormatType.DateFormatType) extends OutgoingMessage with HasReqId {
     import ReqHistoricalData._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
@@ -462,7 +473,7 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (20, 5)
   }
 
-  case class CancelHistoricalData(reqId: ReqId) extends OutgoingMessage {
+  case class CancelHistoricalData(reqId: ReqId) extends OutgoingMessage with HasReqId {
     import CancelHistoricalData._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
@@ -476,8 +487,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class ExerciseOptions(reqId: ReqId, contract: Contract,
-    exerciseAction: ExerciseType.ExerciseType, exerciseQuantity: Int,
-    account: String, overrideDefaults: Boolean) extends OutgoingMessage {
+      exerciseAction: ExerciseType.ExerciseType, exerciseQuantity: Int,
+      account: String, overrideDefaults: Boolean) extends OutgoingMessage {
     import ExerciseOptions._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
@@ -564,10 +575,10 @@ trait OutgoingMessages { _: ConfigSettings =>
    *
    */
   case class ReqRealTimeBars(tickerId: ReqId,
-    contract: Contract,
-    barSize: Int,
-    whatToShow: String,
-    useRTH: Boolean) extends OutgoingMessage {
+      contract: Contract,
+      barSize: Int,
+      whatToShow: WhatToShow,
+      useRTH: Boolean) extends OutgoingMessage with HasTickerId {
 
     import ReqRealTimeBars._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
@@ -594,7 +605,7 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (50, 2)
   }
 
-  case class CancelRealTimeBars(tickerId: ReqId) extends OutgoingMessage {
+  case class CancelRealTimeBars(tickerId: ReqId) extends OutgoingMessage with HasTickerId {
 
     import CancelRealTimeBars._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
@@ -610,8 +621,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class ReqFundamentalData(reqId: ReqId,
-    contract: Contract,
-    reportType: FundamentalType.FundamentalType) extends OutgoingMessage {
+      contract: Contract,
+      reportType: FundamentalType.FundamentalType) extends OutgoingMessage {
 
     import ReqFundamentalData._
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
@@ -647,9 +658,9 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class CalculateImpliedVolatility(reqId: ReqId,
-    contract: Contract,
-    optionPrice: Double,
-    underPrice: Double) extends OutgoingMessage {
+      contract: Contract,
+      optionPrice: Double,
+      underPrice: Double) extends OutgoingMessage {
 
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
@@ -687,9 +698,9 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class CalculateOptionPrice(reqId: ReqId,
-    contract: Contract,
-    volatility: Double,
-    underPrice: Double) extends OutgoingMessage {
+      contract: Contract,
+      volatility: Double,
+      underPrice: Double) extends OutgoingMessage {
 
     override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
