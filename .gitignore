@@ -28,6 +28,10 @@ bin/
 .worksheet/
 
 #
+# ensime
+#
+.ensime
+#
 # Linux
 #
 *~

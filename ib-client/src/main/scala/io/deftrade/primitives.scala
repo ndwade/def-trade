@@ -108,7 +108,7 @@ object OrderId extends GenIdCompanion[OrderId](offset = 0) with AtomicGenerator[
  * ReqId 
  */
 case class ReqId(val id: Int) extends AnyVal with GenId { override def raw: Int = id + ReqId.offset }
-object ReqId extends GenIdCompanion[ReqId](offset = 0x40000000) with AtomicGenerator[ReqId] 
+object ReqId extends GenIdCompanion[ReqId](offset = 0x40000000) with AtomicGenerator[ReqId]
 
 /**
  *

@@ -21,12 +21,15 @@ import scala.util.{ Try, Success, Failure }
 import scala.util.control.{ NonFatal, ControlThrowable }
 import scala.concurrent.{ Future, ExecutionContext }
 import akka.actor._
-import akka.event.{ ActorEventBus, SubchannelClassification }
+import akka.event.{ EventBus, ActorEventBus, SubchannelClassification }
 import akka.util.Subclassification
 
-class Subscriptions(system: ActorSystem) extends ActorEventBus with SubchannelClassification {
-
+trait SubscriptionsEventBus extends EventBus {
   type Event = AnyRef
+}
+
+class Subscriptions(system: ActorSystem) extends ActorEventBus with SubchannelClassification with SubscriptionsEventBus {
+
   type Classifier = Class[_]
 
   import ActorDSL._
@@ -63,8 +66,8 @@ class Subscriptions(system: ActorSystem) extends ActorEventBus with SubchannelCl
 
 }
 
-trait SubscriptionsComponent {
-  def subs: Subscriptions
+trait SubscriptionsComponentReadOnly {
+  def subs: SubscriptionsEventBus
 }
 
 /**
@@ -79,7 +82,7 @@ trait ConfigSettings {
  * Implements the IbConnection actor, which manages the connection to TWS.
  */
 abstract class IbConnectionComponent(val system: ActorSystem)
-    extends SubscriptionsComponent with IncomingMessages with OutgoingMessages with ConfigSettings {
+    extends SubscriptionsComponentReadOnly with StreamsMap with IncomingMessages with OutgoingMessages with ConfigSettings { 
 
   /**
    * Configuration settings - read only.
@@ -90,8 +93,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
   /**
    * An EventBus instance which holds all the subscriptions for message deliver.
    */
-  //  final val subs: ActorEventBus = new Subscriptions
-  final val subs = new Subscriptions(system)
+  
   /**
    * The Actor (and FSM) which manages the connection state, reads and writes messages to the
    * socket, and publishes TWS API messages, connection status messages and error messages.

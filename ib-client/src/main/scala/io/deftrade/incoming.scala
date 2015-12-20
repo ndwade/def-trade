@@ -16,6 +16,7 @@
 package io.deftrade
 
 import akka.actor.ActorRef
+import org.reactivestreams.Subscriber
 import java.io.{ DataInputStream, IOException }
 
 private[deftrade] object IncomingMessages {
@@ -60,14 +61,14 @@ private[deftrade] object IncomingMessages {
 // todo: different exchanges have different accepted orders for the same contract. Results in 
 // multiple ContractDetailsCont messages for the same security. Different liquid hours as well.
 
-trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
+trait IncomingMessages { self: SubscriptionsComponentReadOnly with StreamsMap with OutgoingMessages =>
 
   import NonDefaultNamedValues.nonDefaultNamedValues
 
   import ImplicitConversions._
 
   import IncomingMessages._
-  
+
   /**
    * Marker trait for all messages which may be subscribed to from the subs EventBus.
    */
@@ -190,20 +191,25 @@ trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
    * Codes and messages should be considered part of the API specification. Note this is the only
    * place where the TWS API notion of "error codes" is retained.
    */
-  //  case class Error(id: Int, errCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
-  case class Error(eid: Either[OrderId, ReqId], errorCode: Int, errorMsg: String) extends SystemMessage with ErrorMessage {
+  case class Error(eid: Either[OrderId, ReqId], errorCode: Int, errorMsg: String)
+      extends Throwable(s"$errorCode: $errorMsg") with SystemMessage with ErrorMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
   object Error {
     // TODO: add moar codes
-    val UnknownId = (505, "Fatal Error: Unknown message id.")
-    val UnknownContract = (517, "Unknown contract. Verify the contract details supplied.")
+    //    val UnknownId = (505, "Fatal Error: Unknown message id.")
+    //    val UnknownContract = (517, "Unknown contract. Verify the contract details supplied.")
     val code = 4
     def read(implicit input: DataInputStream): Unit = {
       val version: Int = rdz
-      if (version < 2) subs publish Error(eid = "-1", errorCode = -1, errorMsg = rdz)
-      else subs publish Error(eid = rdz, errorCode = rdz, errorMsg = rdz)
+      val id = if (version < 2) "-1" else rdz
+      val err =
+        if (version < 2) Error(eid = id, errorCode = -1, errorMsg = rdz)
+        else Error(eid = id, errorCode = rdz, errorMsg = rdz)
+      // FIXME: this is pretty broken for id == -1
+      streams get id foreach { s => s onError err; streams - id }
+      subs publish err
     }
   }
 
@@ -270,7 +276,7 @@ trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
   }
 
   /**
-   * TODO: Make an XmlType parameter
+   * 
    */
   case class ScannerParameters(xml: String) extends SystemMessage {
     override def toString: String = nonDefaultNamedValues
@@ -298,12 +304,16 @@ trait IncomingMessages { _: SubscriptionsComponent with OutgoingMessages =>
       val tickerId, tickType, price = rdz
       val size = rdzIf(version >= 2)
       val canAutoExecute = rdzIf(version >= 3)
-      subs publish TickPrice(
-        tickerId = tickerId, field = tickType, price = price, canAutoExecute = canAutoExecute)
+      val tp = TickPrice(tickerId = tickerId, field = tickType, price = price, canAutoExecute = canAutoExecute)
+      val os = streams get tickerId
+      os foreach { _ onNext tp }
+      subs publish tp
       if (version >= 2) {
         val sizeTickType = toSizeTickType(tickType)
         if (sizeTickType != INVALID) {
-          subs publish TickSize(tickerId = tickerId, field = sizeTickType, size = size)
+          val ts = TickSize(tickerId = tickerId, field = sizeTickType, size = size)
+          os foreach { _ onNext ts }
+          subs publish ts
         }
       }
     }

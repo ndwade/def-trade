@@ -17,17 +17,17 @@ package io {
 
   /**
    * global notes
-   * 
-   * 
+   *
+   *
    * cake structure: ib module needs to accept the actor system as a parameter -
-   * therefore config, pubsub, and all actors within ib - and all transitive dependencies - 
+   * therefore config, pubsub, and all actors within ib - and all transitive dependencies -
    * must be baked in the same cake. This includes IncomingMessages and OutgoingMessages, but not
    * DTOs.
-   *  
+   *
    * moar new ideas 11/17/15
-   * 
+   *
    * usage seems to fall into some distinct request/response patterns.
-   * 
+   *
    * Pure Streams (explicit cancel, no explicit End responce)
    *  - ticks (incl options comp)
    *  - bars
@@ -36,29 +36,29 @@ package io {
    *  - Fundamental data?! Yes, appears to be. Verify.
    *  - Historical data - special handling; end must be calculated.
    *  - news bullitins
-   *  
+   *
    *  Future Aggregate - self canceling, explicit End response
    *  - ticks (no genericTickList)
    *  - openOrders (at startup only! TODO - are End responses seen? in regular order flow?)
    *  - reqExecutions (at startup only! TODO - check this)
    *  - contractDetails and BondContractDetails
-   *  
+   *
    *  Stream of Aggregates - explicit Cancel, Explicit End Response
    *  (not sure about this - thinking these are pure streams)
    *  - account value
    *  - Account summary
    *  - positions
    *  - scanner data
-   *  
+   *
    *  Pure RPC
    *  - scanner parameters
-   *  
+   *
    *  REST-like (seems to be explicit GET and PUT analogs here)
    *   - FA managed account stuff
-   *   
+   *
    *   ORDER STUFF -> wtf
    *   DISPLAY GROUPS -> wtfc
-   *  
+   *
    *
    * Clean layering: ib client should be *testable* against java api without service layer
    * Services layer should be usable without persistence schema.
@@ -121,7 +121,7 @@ package io {
    */
 
   package object deftrade {
-    
+
     // TODO: framework-wide utilities must be factored into a separate util proj
     // once the services subprojexts are in place.
 
@@ -148,7 +148,7 @@ package io.deftrade {
   }
 
   private[deftrade] class SettingsImpl(config: Config) extends Extension {
-    object ibc {      
+    object ibc {
       val host: String = config.getString("deftrade.ibc.host")
       val port: Int = config.getInt("deftrade.ibc.port")
       val clientId: Int = config.getInt("deftrade.ibc.client-id")
@@ -186,7 +186,7 @@ package io.deftrade {
     }
 
     import scala.util.control.NonFatal
-    
+
     class SingleThreadPool extends java.util.concurrent.Executor {
       import java.util.concurrent.RejectedExecutionException
       private[this] val lock = new {}
@@ -226,10 +226,14 @@ package io.deftrade {
         ret
       }
     }
+    
+    implicit class Piper[A](val a: A) extends AnyVal {
+      @inline def |>[B](f: A => B): B = f(a) 
+    }
 
     import scala.util.{ Try, Failure }
 
-    implicit class HookFailure[T](t: Try[T]) {
+    implicit class HookFailure[T](val t: util.Try[T]) extends AnyVal {
       def hookFailure(block: => Unit): Try[T] = t recoverWith {
         case NonFatal(x) => block; Failure(x)
       }

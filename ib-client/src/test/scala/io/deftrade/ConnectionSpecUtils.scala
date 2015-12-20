@@ -41,7 +41,11 @@ abstract class ConnectionSpecBase(_system: ActorSystem) extends TestKit(_system)
    */
   val serverVersion = 69 // current version - should be param?
 
-  object IB extends IbConnectionComponent(system)
+  object IB extends IbConnectionComponent(system) {
+    import org.reactivestreams.Subscriber
+    override val subs = new Subscriptions(system)
+    override val streams = collection.concurrent.TrieMap.empty[Int, Subscriber[Any]]
+  }
   import IB._
 
   final val server = new TestServer(system)
