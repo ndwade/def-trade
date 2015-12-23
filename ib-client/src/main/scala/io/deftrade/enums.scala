@@ -503,6 +503,17 @@ object Currency extends Enumeration with HasUndefined with RxTxString {
   type Currency = Value
   val USD, AUD, CAD, CHF, CNY, DKK, EUR, GBP, HKD, HUF, ILS, JPY, MXN, NOK, NZD, SEK, SGD, KRW = Value
 }
+
+object TimeZones extends Enumeration with RxTxString {
+  val GMT = Value // Greenwich Mean Time
+  val EST = Value // Eastern Standard Time
+  val MST = Value // Mountain Standard Time
+  val PST = Value // Pacific Standard Time
+  val AST = Value // Atlantic Standard Time
+  val JST = Value // Japan Standard Time
+  val AET = Value // Australian Standard Time
+}
+
 // TODO: object ComboParam
 
 // TODO: object FADataType // FA not yet supported
