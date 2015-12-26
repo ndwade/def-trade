@@ -19,10 +19,7 @@ import io.deftrade._
 import java.io.{ File, FileOutputStream, PrintStream }
 
 package demo {
-  object Ib extends IbConnectionComponent(system = ActorSystem("demo")) {
-    override val subs = new Subscriptions(system)
-    override def streams = ???  
-  }
+  object Ib extends IbConnectionComponent(system = ActorSystem("demo")) with SubscriptionsImpl
 }
 
 package object demo {

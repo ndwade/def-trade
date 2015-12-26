@@ -19,10 +19,7 @@ import akka.actor._
 import io.deftrade._
 import io.deftrade.Action._
 
-object CustomCakeIb extends IbConnectionComponent(ActorSystem.create("system")) {
-  override def subs = ???
-  override def streams = ???
-}
+object CustomCakeIb extends IbConnectionComponent(ActorSystem.create("system")) with SubscriptionsStub // do nothing lol
 
 object StandAloneRandomCrap {
 

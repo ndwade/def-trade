@@ -21,8 +21,19 @@ import scala.collection.concurrent
 import scala.xml
 import org.reactivestreams.{ Publisher, Subscriber, Subscription }
 
-trait StreamsMap {
-  def streams: concurrent.Map[Int, Subscriber[Any]]
+trait StreamsComponent {
+  type CMap <: collection.Map[Int, Subscriber[Any]] // some kind of concurrent map
+  protected def streams: CMap
+}
+
+trait StreamsStub extends StreamsComponent {
+  type CMap = collection.Map[Int, Subscriber[Any]]
+  override protected lazy val streams: CMap = new collection.Map[Int, Subscriber[Any]] {
+    override def get(k: Int): Option[Subscriber[Any]] = None
+    override def iterator: Iterator[(Int, Subscriber[Any])] = Iterator.empty
+    override def -(key: Int): CMap = streams // ignored 
+    override def +[B1 >: Subscriber[Any]](kv: (Int, B1)): collection.Map[Int, B1] = streams // ignored
+  }
 }
 
 /*
@@ -37,7 +48,7 @@ trait StreamsMap {
  * ReqScannerParameters (based on config params) - hold in a well know location as XML
  * ReqAccountUpdates() etc (based on config params) - sets up service for Account, Positions etc.
  */
-trait Services extends StreamsMap { self: IbConnectionComponent with OutgoingMessages with ConfigSettings =>
+trait Services extends StreamsComponent { self: IbConnectionComponent with OutgoingMessages with ConfigSettings =>
 
   def connect(): Either[IbConnectError, IbConnectOk]
 
@@ -49,10 +60,17 @@ trait Services extends StreamsMap { self: IbConnectionComponent with OutgoingMes
   // also: for data farms
 
   /*
- * ReferenceData 
- */
+   * ReferenceData 
+   */
 
   // Will often be used with .toFuture, but want to allow for streaming directly into DB
+  /*
+   * wrz(symbol, secType, expiry, strike, right, multiplier, exchange, currency, localSymbol)
+
+      if (serverVersion >= MinServerVer.TradingClass) wrz(tradingClass)
+
+      wrz(includeExpired, secIdType, secId)
+   */
   def contractDetails(contract: Contract): Publisher[ContractDetails]
 
   // TODO: verify this really has RPC semantics.
@@ -146,18 +164,19 @@ trait Services extends StreamsMap { self: IbConnectionComponent with OutgoingMes
   def cancelAll(): Unit
 
   /*
-   * 
+   * Internals. TODO: review scoping
    */
   import scala.language.existentials
 
   type Msg = OutgoingMessage with HasReqId
 
-  override val streams: concurrent.Map[Int, Subscriber[Any]] = concurrent.TrieMap.empty[Int, Subscriber[Any]]
+  type CMap = concurrent.Map[Int, Subscriber[Any]]
+  override protected lazy val streams: CMap = concurrent.TrieMap.empty[Int, Subscriber[Any]]
 
   case class IbPublisher[T](req: Msg, cnc: Msg) extends Publisher[T] {
 
     import java.util.concurrent.atomic.AtomicBoolean
-    
+
     val subscribed = new AtomicBoolean(false) // no anticipation of race but why take chances
     override def subscribe(subscriber: Subscriber[_ >: T]): Unit = {
       val first = !subscribed.getAndSet(true)
@@ -170,44 +189,38 @@ trait Services extends StreamsMap { self: IbConnectionComponent with OutgoingMes
 
     private var r = (n: Long) => {
       require(n == Long.MaxValue) // FIXME: log this in production, no assertion  
-      streams += ((req.reqId.raw, subscriber))
+      streams + (req.reqId.raw -> subscriber)
       conn ! req
     }
 
     override def request(n: Long): Unit = { r(n); r = _ => () }
 
     private var c = () => {
-      streams -= req.reqId.raw
+      streams - req.reqId.raw
       conn ! cnc
     }
     override def cancel(): Unit = { c(); c = () => () }
   }
 
-  import akka.stream.ActorMaterializer
+  //  object TicksToBar {
+  //    import java.time._
+  //
+  //    val zdt: ZonedDateTime = ???
+  //    val dur: Duration = ???
+  //  }
+
+}
+
+object Services {
+
   import org.reactivestreams.Publisher
   import akka.stream.scaladsl.{ Source, Flow, Sink }
 
-  implicit val _system = self.system
-  implicit val exectutor = _system.dispatcher
-  implicit val materializer = ActorMaterializer()
-
-  implicit class PublisherToFuture[M](publisher: Publisher[M]) {
+  implicit class PublisherToFuture[M](publisher: Publisher[M])(implicit mat: akka.stream.Materializer) {
     def toFuture: Future[List[M]] = {
       Source(publisher).fold(List.empty[M]) { (u, t) => t :: u } map (_.reverse) runWith Sink.head
     }
 
     // def toFutureSeq: Future[Seq[M]] = Source(publisher).grouped(Int.MaxValue) runWith Sink.head
   }
-
-  object TicksToBar {
-    import java.time._
-
-    val zdt: ZonedDateTime = ???
-    val dur: Duration = ???
-  }
-
-  /*
-   * 
-   */
-
 }

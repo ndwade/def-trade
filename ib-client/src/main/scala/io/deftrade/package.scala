@@ -222,6 +222,7 @@ package io.deftrade {
             }
           }
         })
+        ret.setDaemon(true)
         ret.start()
         ret
       }

@@ -61,7 +61,7 @@ private[deftrade] object IncomingMessages {
 // todo: different exchanges have different accepted orders for the same contract. Results in 
 // multiple ContractDetailsCont messages for the same security. Different liquid hours as well.
 
-trait IncomingMessages { self: SubscriptionsComponentReadOnly with StreamsMap with OutgoingMessages =>
+trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with OutgoingMessages =>
 
   import NonDefaultNamedValues.nonDefaultNamedValues
 

@@ -24,50 +24,75 @@ import akka.actor._
 import akka.event.{ EventBus, ActorEventBus, SubchannelClassification }
 import akka.util.Subclassification
 
-trait SubscriptionsEventBus extends EventBus {
-  type Event = AnyRef
+trait SubscriptionsComponent { _: IbConnectionComponent =>
+
+  trait SubscriptionsEventBusPublishOnly extends EventBus {
+    type Event = AnyRef
+  }
+  type SEB <: SubscriptionsEventBusPublishOnly
+  def subs: SEB
 }
 
-class Subscriptions(system: ActorSystem) extends ActorEventBus with SubchannelClassification with SubscriptionsEventBus {
+trait SubscriptionsStub extends SubscriptionsComponent { _: IbConnectionComponent =>
+  
+  type SEB = SubscriptionsEventBusStub
+  
+  val subs = new SEB
 
-  type Classifier = Class[_]
+  class SubscriptionsEventBusStub extends SubscriptionsEventBusPublishOnly {
 
-  import ActorDSL._
-  private case class Subscribed(subscriber: ActorRef)
+    type Classifier = Nothing  // these will make compilation impossible subscribe() called
+    type Subscriber = Nothing
+
+    override def publish(event: Event): Unit = ()
+    override def subscribe(subscriber: Subscriber, to: Classifier): Boolean = false
+    override def unsubscribe(subscriber: Subscriber): Unit = ()
+    override def unsubscribe(subscriber: Subscriber, from: Classifier): Boolean = false
+  }
+}
+
+trait SubscriptionsImpl extends SubscriptionsComponent { _: IbConnectionComponent =>
+
+  type SEB = SubscriptionsEventBus
+  val subs = new SEB
+
+  final class SubscriptionsEventBus extends ActorEventBus with SubchannelClassification with SubscriptionsEventBusPublishOnly {
+
+    import ActorDSL._
+    private case class Subscribed(subscriber: ActorRef)
+    
+    type Classifier = Class[_]
 
   /*
    * arguably dodgy because the reaper actor closes over the "this" pointer of the Subscriptions
    * instance... pretty sure this is OK in this instance but generally not best practice. 
    */
-  private val reaper = actor(system, name = "subscription-reaper") {
-    new Act {
-      become {
-        case Subscribed(subscriber) => context.watch(subscriber)
-        case Terminated(subscriber) => unsubscribe(subscriber)
+    private val reaper = actor(system, name = "subscription-reaper") {
+      new Act {
+        become {
+          case Subscribed(subscriber) => context.watch(subscriber)
+          case Terminated(subscriber) => unsubscribe(subscriber)
+        }
       }
+    }
+
+    protected implicit val subclassification = new Subclassification[Class[_]] {
+      def isEqual(x: Class[_], y: Class[_]) = x == y
+      def isSubclass(x: Class[_], y: Class[_]) = y isAssignableFrom x
+    }
+
+    protected def classify(event: Event): Class[_] = event.getClass
+
+    protected def publish(event: Event, subscriber: ActorRef) = subscriber ! event
+
+    override def subscribe(subscriber: Subscriber, to: Classifier): Boolean = {
+      val ret = super.subscribe(subscriber, to)
+      // subscriber may die before watch() - OK because Terminated will still be received by reaper
+      if (ret) reaper ! Subscribed(subscriber)
+      ret
     }
   }
 
-  protected implicit val subclassification = new Subclassification[Class[_]] {
-    def isEqual(x: Class[_], y: Class[_]) = x == y
-    def isSubclass(x: Class[_], y: Class[_]) = y isAssignableFrom x
-  }
-
-  protected def classify(event: Event): Class[_] = event.getClass
-
-  protected def publish(event: Event, subscriber: ActorRef) = subscriber ! event
-
-  override def subscribe(subscriber: Subscriber, to: Classifier): Boolean = {
-    val ret = super.subscribe(subscriber, to)
-    // subscriber may die before watch() - OK because Terminated will still be received by reaper
-    if (ret) reaper ! Subscribed(subscriber)
-    ret
-  }
-
-}
-
-trait SubscriptionsComponentReadOnly {
-  def subs: SubscriptionsEventBus
 }
 
 /**
@@ -82,7 +107,7 @@ trait ConfigSettings {
  * Implements the IbConnection actor, which manages the connection to TWS.
  */
 abstract class IbConnectionComponent(val system: ActorSystem)
-    extends SubscriptionsComponentReadOnly with StreamsMap with IncomingMessages with OutgoingMessages with ConfigSettings { 
+    extends SubscriptionsComponent with StreamsStub with IncomingMessages with OutgoingMessages with ConfigSettings {
 
   /**
    * Configuration settings - read only.
@@ -93,7 +118,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
   /**
    * An EventBus instance which holds all the subscriptions for message deliver.
    */
-  
+
   /**
    * The Actor (and FSM) which manages the connection state, reads and writes messages to the
    * socket, and publishes TWS API messages, connection status messages and error messages.
