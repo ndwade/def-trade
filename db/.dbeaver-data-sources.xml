@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data-sources>
+	<data-source id="postgresql-151e40e639f-21d08bd37d69537c" provider="generic" driver="postgresql" name="PostgreSQL - localhost" create-date="1451230192824" save-password="true" show-system-objects="true" read-only="false">
+		<connection host="localhost" port="5432" server="" database="" url="jdbc:postgresql://localhost:5432/" user="" type="dev">
+			<property name="loginTimeout" value="10"/>
+			<network-handler type="PROXY" id="socks_proxy" enabled="false" user="" save-password="false">
+				<property name="socks-host" value=""/>
+				<property name="socks-port" value="1080"/>
+			</network-handler>
+			<network-handler type="TUNNEL" id="ssh_tunnel" enabled="false" user="" save-password="false">
+				<property name="port" value="22"/>
+				<property name="keyPath" value=""/>
+				<property name="host" value=""/>
+				<property name="authType" value="PASSWORD"/>
+			</network-handler>
+			<bootstrap/>
+		</connection>
+	</data-source>
+</data-sources>
