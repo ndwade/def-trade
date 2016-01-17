@@ -239,6 +239,7 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
 
     val subscribed = new AtomicBoolean(false) // no anticipation of race but why take chances
     override def subscribe(subscriber: Subscriber[_ >: T]): Unit = {
+      if (subscriber == null) throw new NullPointerException("null Subscriber")
       val first = !subscribed.getAndSet(true)
       if (first) subscriber onSubscribe IbSubscription(subscriber.asInstanceOf[Subscriber[Any]], msg, () => coda)
     }

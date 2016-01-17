@@ -592,6 +592,7 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
       streams.get(fd.reqId.raw) foreach { s =>
         s.onNext(fd)
         s.onComplete()
+        streams - fd.reqId.raw
       }
       subs publish fd
     }

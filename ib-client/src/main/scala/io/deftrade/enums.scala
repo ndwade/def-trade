@@ -479,23 +479,25 @@ object WhatToShow extends Enumeration with HasUndefined with TxString {
 //	}
 
 object BarSize extends Enumeration with TxString {
+  class XVal(name: String, val secs: Int) extends Val(name)
+  def Value(name: String, secs: Int) = new XVal(name, secs)
   type BarSize = Value
-  val _1_secs = Value("1 secs")
-  val _5_secs = Value("5 secs")
-  val _10_secs = Value("10 secs")
-  val _15_secs = Value("15 secs")
-  val _30_secs = Value("30 secs")
-  val _1_min = Value("1 min")
-  val _2_mins = Value("2 mins")
-  val _3_mins = Value("3 mins")
-  val _5_mins = Value("5 mins")
-  val _10_mins = Value("10 mins")
-  val _15_mins = Value("15 mins")
-  val _20_mins = Value("20 mins")
-  val _30_mins = Value("30 mins")
-  val _1_hour = Value("1 hour")
-  val _4_hours = Value("4 hours")
-  val _1_day = Value("1 day")
+  val _1_secs = Value("1 secs", 1)
+  val _5_secs = Value("5 secs", 5)
+  val _10_secs = Value("10 secs", 10)
+  val _15_secs = Value("15 secs", 15)
+  val _30_secs = Value("30 secs", 30)
+  val _1_min = Value("1 min", 1 * 60)
+  val _2_mins = Value("2 mins", 2 * 60)
+  val _3_mins = Value("3 mins", 3 * 60)
+  val _5_mins = Value("5 mins", 5 * 60)
+  val _10_mins = Value("10 mins", 10 * 60)
+  val _15_mins = Value("15 mins", 15 * 60)
+  val _20_mins = Value("20 mins", 20 * 60)
+  val _30_mins = Value("30 mins", 30 * 60)
+  val _1_hour = Value("1 hour", 60 * 60)
+  val _4_hours = Value("4 hours", 4 * 60 * 60)
+  val _1_day = Value("1 day") // sic - don't count seconds for these last two; can vary
   val _1_week = Value("1 week")
 }
 

@@ -29,6 +29,7 @@ object Dependencies {
   //val agent  = "com.typesafe.akka" %% "akka-agent" % Version.Akka
   val testkit = "com.typesafe.akka" %% "akka-testkit" % Version.Akka
 
+  val reactiveStreams = "org.reactivestreams" % "reactive-streams" % "1.0.0"
   val akkaStream = "com.typesafe.akka" %% "akka-stream-experimental" % Version.AkkaStream
   val akkaHttp = "com.typesafe.akka" %% "akka-http-core-experimental" % Version.AkkaStream
   val akkaHttpDsl = "com.typesafe.akka" %% "akka-http-experimental" % Version.AkkaStream
