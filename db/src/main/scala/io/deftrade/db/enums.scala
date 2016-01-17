@@ -18,12 +18,12 @@ package io.deftrade.db
 import com.github.tminglei.slickpg._
 
 /**
- * Mixin trait for implicit conversion of Enumeration values to 
+ * Mixin trait for implicit conversion of Enumeration values to
  * Slick column types (with extension methods).
- * 
- * The mixin strategy relies on Scala rules for the implicit search path: because the enum values 
+ *
+ * The mixin strategy relies on Scala rules for the implicit search path: because the enum values
  * are type parameters of the mapping type constructors, the implicit scope of those type parameters
- * is searched: this includes the enclosing object, the Enumeration.
+ * is searched: this includes the enclosing object, which is the Enumeration.
  */
 trait SlickPgImplicits { self: Enumeration =>
 
@@ -51,16 +51,6 @@ object SlickPgImplicits {
   }
 }
 
-object WeekDays extends Enumeration with SlickPgImplicits {
-  type WeekDay = Value
-  val Mon, Tue, Wed, Thu, Fri, Sat, Sun = Value
-}
-
-object Rainbows extends Enumeration with SlickPgImplicits {
-  type Rainbow = Value
-  val red, orange, yellow, green, blue, purple = Value
-}
-
 object RfStatementType extends Enumeration with SlickPgImplicits {
   type RfStatementType = Value
   val INC, BAL, CAS = Value
@@ -77,21 +67,32 @@ object ExchangeOs extends Enumeration with SlickPgImplicits {
   val dummy = Value
 }
 
+object EnumPickler {
+
+  import upickle.default.{ Reader, Writer }
+  import upickle.Js
+
+  private def enum2Reader(e: Enumeration) = Reader[e.Value] { case Js.Str(s) => e.withName(s) }
+  private def enum2Writer(e: Enumeration) = Writer[e.Value] { case v => Js.Str(v.toString) }
+
+  def apply(e: Enumeration) = (enum2Reader(e), enum2Writer(e))
+}
+
+object EnumImplicits {
+  implicit val (rdSecType, wrSecType) = EnumPickler(SecType)
+  implicit val (rdRfST, wrRfST) = EnumPickler(RfStatementType)
+
+  implicit class PgEnum(val e: Enumeration) extends AnyVal {
+    import PgEnumSupportUtils.{ buildCreateSql, buildDropSql }
+    def createSql = buildCreateSql(e.toString, e, quoteName = false)
+    def dropSql = buildDropSql(e.toString, quoteName = false)
+  }
+}
 
 object IfThisCompilesItWorks {
 
   import slick.jdbc.JdbcType
   import DefTradePgDriver.EnumColumnExtensionMethods
   import DefTradePgDriver.api._
-
-  implicitly[JdbcType[WeekDays.WeekDay]]
-  implicitly[JdbcType[List[WeekDays.WeekDay]]]
-  implicitly[Rep[WeekDays.Value] => EnumColumnExtensionMethods[WeekDays.Value, WeekDays.Value]]
-  implicitly[Rep[Option[WeekDays.Value]] => EnumColumnExtensionMethods[WeekDays.Value, Option[WeekDays.Value]]]
-
-  implicitly[JdbcType[Rainbows.Rainbow]]
-  implicitly[JdbcType[List[Rainbows.Rainbow]]]
-  implicitly[Rep[Rainbows.Value] => EnumColumnExtensionMethods[Rainbows.Value, Rainbows.Value]]
-  implicitly[Rep[Option[Rainbows.Value]] => EnumColumnExtensionMethods[Rainbows.Value, Option[Rainbows.Value]]]
 
 }

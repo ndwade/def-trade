@@ -175,7 +175,7 @@ create index md_series_con_id_index on md_series (con_id, exchange_id, currency)
 
 
 
--- md_pecks: holds packed, pickled ticks.
+-- ds_pecks: holds packed, pickled ticks.
 -- also holds high frequency bar data (e.g. 5 second bars)
 -- also holds random, specialed stuff (like high freq greeks bars for options)
 -- note: this table holds market data *as collected* (with possible conservative scrub - noted in md_series.encoding field)

@@ -32,7 +32,7 @@ private[deftrade] object OutgoingMessages {
   // TODO: support FA messages
 
   import java.io.{ DataInputStream, OutputStream, IOException }
-
+  
   @inline def _wrz(s: String)(implicit os: OutputStream) {
     os write s.getBytes("US-ASCII")
     os write (0: Byte) // putting the z in wrz
@@ -55,11 +55,8 @@ private[deftrade] object OutgoingMessages {
   @inline def isEmpty[A](a: A)(implicit ev: String => A): Boolean = a == ("": A)
   @inline def nonEmpty[A](a: A)(implicit ev: String => A): Boolean = a != ("": A)
 
-  class OutgoingMessageValidationException(message: String)
-    extends RuntimeException(message) with util.control.ControlThrowable
-
-  def fail(errmsg: String) = throw new OutgoingMessageValidationException(errmsg)
-
+  class ValidationException(message: String) extends RuntimeException(message) with util.control.ControlThrowable
+  def validationException(errmsg: String) = throw new ValidationException(errmsg)
 }
 
 trait OutgoingMessages { _: ConfigSettings =>
@@ -70,35 +67,35 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   import OutgoingMessages._
 
-  case class IbConnect(
-    host: String = settings.ibc.host,
-    port: Int = settings.ibc.port,
-    clientId: Int = settings.ibc.clientId)
+  sealed trait HasRawId {
+    def rawId: Int
+  }
+
+  sealed trait Cancellable {
+    def cancelMessage: AnyRef
+  }
+
+  case class IbConnect(host: String = settings.ibc.host,
+                       port: Int = settings.ibc.port,
+                       clientId: Int = settings.ibc.clientId) extends HasRawId with Cancellable {
+    
+    def rawId = IbGlobalRawId
+    def cancelMessage = IbDisconnect("system stream cancel")
+  }
 
   case class IbDisconnect(why: String)
 
   /**
-   * Base trait for all TWS API messages sent to the server. {{{OutgoingMessage}}}s can write
-   * themselves to an output stream.
-   */
-  sealed trait OutgoingMessage {
+    * Base trait for all TWS API messages sent to the server. [[OutgoingMessage]]s can write
+    * themselves to an output stream.
+    */
+  sealed trait OutgoingMessage extends HasRawId {
     def write(implicit out: OutputStream, serverVersion: Int): Unit
   }
 
-  sealed trait HasReqId {
-    def reqId: ReqId
-  }
-
-  sealed trait HasTickerId extends HasReqId {
-    def tickerId: ReqId
-    final override def reqId: ReqId = tickerId
-  }
-
-  /**
-   *
-   */
   case class ReqIds(numIds: Int) extends OutgoingMessage {
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(ReqIds.api)
       wrz(numIds)
     }
@@ -107,19 +104,20 @@ trait OutgoingMessages { _: ConfigSettings =>
   object ReqIds { val api = (8, 1) }
 
   import GenericTickType._
-  /**
-   *
-   */
+
   case class ReqMktData(
       val tickerId: ReqId,
       contract: Contract,
       genericTickList: List[GenericTickType],
-      snapshot: Boolean) extends OutgoingMessage with HasTickerId {
+      snapshot: Boolean) extends OutgoingMessage with Cancellable {
 
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = tickerId.raw
+    def cancelMessage = CancelMktData(tickerId)
+
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
       if (serverVersion < MinServerVer.TradingClass && !contract.tradingClass.isEmpty) {
-        fail("tradingClass parameter not supported by this server version")
+        validationException("tradingClass parameter not supported by this server version")
       }
       wrz(ReqMktData.api)
       wrz(tickerId)
@@ -135,7 +133,7 @@ trait OutgoingMessages { _: ConfigSettings =>
       }
       contract.underComp match {
         case Some(uc) => wrz(true, uc.conId, uc.delta, uc.price)
-        case None => wrz(false)
+        case None     => wrz(false)
       }
       wrz((genericTickList map (v => (v: String))) mkString ",")
       wrz(snapshot)
@@ -145,9 +143,12 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   object ReqMktData { val api = (1, 10) }
 
-  case class CancelMktData(val tickerId: ReqId) extends OutgoingMessage with HasTickerId {
+  case class CancelMktData(val tickerId: ReqId) extends OutgoingMessage {
     import CancelMktData._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+
+    def rawId = tickerId.raw
+
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(tickerId)
     }
@@ -158,11 +159,12 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class ReqMktDepth(tickerId: ReqId, contract: Contract, numRows: Int) extends OutgoingMessage {
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = tickerId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass) {
         if (!tradingClass.isEmpty || conId.id > 0) {
-          fail("conId and tradingClass parameters not supported by this server version")
+          validationException("conId and tradingClass parameters not supported by this server version")
         }
       }
       val tc = serverVersion >= MinServerVer.TradingClass
@@ -182,7 +184,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class CancelMktDepth(tickerId: ReqId) extends OutgoingMessage {
     import CancelMktDepth._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = tickerId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(tickerId)
     }
@@ -195,7 +198,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqNewsBulletins(allMsgs: Boolean) extends OutgoingMessage {
     import ReqNewsBulletins._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(allMsgs)
     }
@@ -208,7 +212,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class CancelNewsBulletins() extends OutgoingMessage {
     import CancelNewsBulletins._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
     }
     override def toString: String = nonDefaultNamedValues
@@ -220,7 +225,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class SetServerLogLevel(logLevel: ServerLogLevel.ServerLogLevel) extends OutgoingMessage {
     import SetServerLogLevel._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(logLevel)
     }
@@ -232,17 +238,18 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   /**
-   *
-   */
+    *
+    */
   case class ReqContractDetails(reqId: ReqId, contract: Contract) extends OutgoingMessage {
 
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
       import ReqContractDetails._
       import contract._
 
       if (serverVersion < MinServerVer.TradingClass && !tradingClass.isEmpty) {
-        fail("tradingClass parameter not supported by this server version")
+        validationException("tradingClass parameter not supported by this server version")
       }
 
       wrz(api)
@@ -265,18 +272,21 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class PlaceOrder(id: OrderId = "", contract: Contract, order: Order)
-      extends OutgoingMessage {
+      extends OutgoingMessage with Cancellable {
 
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = id.raw
+    def cancelMessage = CancelOrder(id)
+
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
       if (serverVersion < MinServerVer.TradingClass && !contract.tradingClass.isEmpty) {
-        fail("tradingClass parameter not supported by this server version")
+        validationException("tradingClass parameter not supported by this server version")
       }
       if (serverVersion < MinServerVer.ScaleTable) {
         if (!order.scaleTable.isEmpty ||
           !order.activeStartTime.isEmpty ||
           !order.activeStopTime.isEmpty) {
-          fail("scaleTable, activeStartTime and activeStopTime parameters are not supported by this server version")
+          validationException("scaleTable, activeStartTime and activeStopTime parameters are not supported by this server version")
         }
       }
 
@@ -351,7 +361,7 @@ trait OutgoingMessages { _: ConfigSettings =>
       wrz(order.notHeld)
       contract.underComp match {
         case Some(uc) => wrz(true, uc.conId, uc.delta, uc.price)
-        case None => wrz(false)
+        case None     => wrz(false)
       }
       wrz(order.algoStrategy)
       if (order.algoStrategy != AlgoStrategy.Undefined)
@@ -370,7 +380,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class CancelOrder(orderId: OrderId) extends OutgoingMessage {
     import CancelOrder._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = orderId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(orderId)
     }
@@ -382,7 +393,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqOpenOrders() extends OutgoingMessage {
     import ReqOpenOrders._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
     }
     override def toString: String = nonDefaultNamedValues
@@ -392,7 +404,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
   case class ReqAccountUpdates(subscribe: Boolean, acctCode: String = "") extends OutgoingMessage {
     import ReqAccountUpdates._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(subscribe)
       wrz(acctCode)
@@ -405,7 +418,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqExecutions(reqId: ReqId, filter: ExecutionFilter = ExecutionFilter.all) extends OutgoingMessage {
     import ReqExecutions._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(reqId)
       import filter._
@@ -419,7 +433,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqAutoOpenOrders(bAutoBind: Boolean) extends OutgoingMessage {
     import ReqAutoOpenOrders._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(bAutoBind)
     }
@@ -430,7 +445,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
   case class ReqAllOpenOrders() extends OutgoingMessage {
     import ReqAllOpenOrders._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
     }
     override def toString: String = nonDefaultNamedValues
@@ -442,16 +458,22 @@ trait OutgoingMessages { _: ConfigSettings =>
   import WhatToShow.WhatToShow
 
   case class ReqHistoricalData(reqId: ReqId, contract: Contract,
-      endDateTime: String, durationStr: String,
-      barSizeSetting: String, whatToShow: WhatToShow,
-      useRTH: Int,
-      formatDate: DateFormatType.DateFormatType) extends OutgoingMessage with HasReqId {
+                               endDateTime: String, durationStr: String,
+                               barSizeSetting: String, whatToShow: WhatToShow,
+                               useRTH: Int,
+                               formatDate: DateFormatType.DateFormatType)
+      extends OutgoingMessage with Cancellable {
+    
     import ReqHistoricalData._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+
+    def rawId = reqId.raw
+    def cancelMessage = CancelHistoricalData(reqId)
+
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass) {
         if (!tradingClass.isEmpty || conId.id > 0) {
-          fail("conId and tradingClass parameters not supported by this server version")
+          validationException("conId and tradingClass parameters not supported by this server version")
         }
       }
       val tc = serverVersion >= MinServerVer.TradingClass
@@ -473,9 +495,10 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (20, 5)
   }
 
-  case class CancelHistoricalData(reqId: ReqId) extends OutgoingMessage with HasReqId {
+  case class CancelHistoricalData(reqId: ReqId) extends OutgoingMessage {
     import CancelHistoricalData._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(reqId)
     }
@@ -487,14 +510,15 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class ExerciseOptions(reqId: ReqId, contract: Contract,
-      exerciseAction: ExerciseType.ExerciseType, exerciseQuantity: Int,
-      account: String, overrideDefaults: Boolean) extends OutgoingMessage {
+                             exerciseAction: ExerciseType.ExerciseType, exerciseQuantity: Int,
+                             account: String, overrideDefaults: Boolean) extends OutgoingMessage {
     import ExerciseOptions._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass) {
         if (!tradingClass.isEmpty || conId.id > 0) {
-          fail("conId and tradingClass parameters not supported by this server version")
+          validationException("conId and tradingClass parameters not supported by this server version")
         }
       }
       val tc = serverVersion >= MinServerVer.TradingClass
@@ -514,7 +538,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqScannerSubscription(reqId: ReqId, subscription: ScannerSubscription) extends OutgoingMessage {
     import ReqScannerSubscription._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
       wrz(api)
       wrz(reqId)
@@ -536,7 +561,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class CancelScannerSubscription(reqId: ReqId) extends OutgoingMessage {
     import CancelScannerSubscription._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(reqId)
     }
@@ -549,7 +575,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqScannerParameters() extends OutgoingMessage {
     import ReqScannerParameters._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
     }
     override def toString: String = nonDefaultNamedValues
@@ -561,7 +588,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqCurrentTime() extends OutgoingMessage {
     import ReqCurrentTime._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
     }
     override def toString: String = nonDefaultNamedValues
@@ -572,20 +600,24 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   /**
-   *
-   */
+    *
+    */
   case class ReqRealTimeBars(tickerId: ReqId,
-      contract: Contract,
-      barSize: Int,
-      whatToShow: WhatToShow,
-      useRTH: Boolean) extends OutgoingMessage with HasTickerId {
+                             contract: Contract,
+                             barSize: Int,
+                             whatToShow: WhatToShow,
+                             useRTH: Boolean) extends OutgoingMessage with Cancellable {
 
     import ReqRealTimeBars._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    
+    def rawId = tickerId.raw
+    def cancelMessage = CancelRealTimeBars(tickerId)
+    
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass) {
         if (!tradingClass.isEmpty || conId.id > 0) {
-          fail("conId and tradingClass parameters not supported by this server version")
+          validationException("conId and tradingClass parameters not supported by this server version")
         }
       }
       val tc = serverVersion >= MinServerVer.TradingClass
@@ -605,10 +637,11 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (50, 2)
   }
 
-  case class CancelRealTimeBars(tickerId: ReqId) extends OutgoingMessage with HasTickerId {
+  case class CancelRealTimeBars(tickerId: ReqId) extends OutgoingMessage {
 
     import CancelRealTimeBars._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = tickerId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(tickerId)
     }
@@ -620,15 +653,20 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (51, 1)
   }
 
-  case class ReqFundamentalData(reqId: ReqId,
+  case class ReqFundamentalData(
+      reqId: ReqId,
       contract: Contract,
-      reportType: FundamentalType.FundamentalType) extends OutgoingMessage {
+      reportType: FundamentalType.FundamentalType) extends OutgoingMessage with Cancellable {
 
     import ReqFundamentalData._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    
+    def rawId = reqId.raw
+    def cancelMessage = CancelFundamentalData(reqId)
+    
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass && conId.id > 0) {
-        fail("conId parameter not supported by this server version")
+        validationException("conId parameter not supported by this server version")
       }
       wrz(api)
       wrz(reqId)
@@ -646,7 +684,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   case class CancelFundamentalData(reqId: ReqId) extends OutgoingMessage {
 
     import CancelFundamentalData._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(reqId)
     }
@@ -658,14 +697,15 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class CalculateImpliedVolatility(reqId: ReqId,
-      contract: Contract,
-      optionPrice: Double,
-      underPrice: Double) extends OutgoingMessage {
+                                        contract: Contract,
+                                        optionPrice: Double,
+                                        underPrice: Double) extends OutgoingMessage {
 
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass && !tradingClass.isEmpty) {
-        fail("tradingClass parameter not supported by this server version")
+        validationException("tradingClass parameter not supported by this server version")
       }
       wrz(CalculateImpliedVolatility.api)
       wrz(reqId)
@@ -685,7 +725,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   case class CancelCalculateImpliedVolatility(reqId: ReqId) extends OutgoingMessage {
 
     import CancelCalculateImpliedVolatility._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(reqId)
     }
@@ -698,14 +739,15 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class CalculateOptionPrice(reqId: ReqId,
-      contract: Contract,
-      volatility: Double,
-      underPrice: Double) extends OutgoingMessage {
+                                  contract: Contract,
+                                  volatility: Double,
+                                  underPrice: Double) extends OutgoingMessage {
 
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass && !tradingClass.isEmpty) {
-        fail("tradingClass parameter not supported by this server version")
+        validationException("tradingClass parameter not supported by this server version")
       }
       wrz(CalculateOptionPrice.api)
       wrz(reqId)
@@ -725,7 +767,8 @@ trait OutgoingMessages { _: ConfigSettings =>
   case class CancelCalculateOptionPrice(reqId: ReqId) extends OutgoingMessage {
 
     import CancelCalculateOptionPrice._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = reqId.raw
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(reqId)
     }
@@ -739,7 +782,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqMarketDataType(marketDataType: MktDataType.MktDataType) extends OutgoingMessage {
     import ReqMarketDataType._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
       wrz(marketDataType)
     }
@@ -752,7 +796,8 @@ trait OutgoingMessages { _: ConfigSettings =>
 
   case class ReqGlobalCancel() extends OutgoingMessage {
     import ReqGlobalCancel._
-    override def write(implicit out: OutputStream, serverVersion: Int): Unit = {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       wrz(api)
     }
     override def toString: String = nonDefaultNamedValues

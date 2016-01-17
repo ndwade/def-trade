@@ -48,13 +48,49 @@ trait StreamsStub extends StreamsComponent {
  * ReqScannerParameters (based on config params) - hold in a well know location as XML
  * ReqAccountUpdates() etc (based on config params) - sets up service for Account, Positions etc.
  */
-trait Services extends StreamsComponent { self: IbConnectionComponent with OutgoingMessages with ConfigSettings =>
+trait Services extends StreamsComponent { self: IbConnectionComponent with OutgoingMessages with IncomingMessages with ConfigSettings =>
 
-  def connect(): Either[IbConnectError, IbConnectOk]
+  import ServerLogLevel.{ ServerLogLevel }
+  /**
+    * A [[org.reactivestreams.Publisher]] for a stream of all system messages for a connection.
+    *
+    * The following messages will be published:
+    * - all connection messages ({connect, disconnect} X {OK, Error})
+    * - [[io.deftrade.UpdateNewsBullitin]] api messages
+    * - [[io.deftrade.CurrentTime]] api messages
+    * - [[io.deftrade.Error]] api messages for which the id == -1, or for which an id cannot be
+    * found in the id map (which records the ids of all currently outstanding requests). Note:
+    * [[Error]] messages whose ids map to an outstanding request are routed to the publisher for the
+    * associated responses; those streams will be terminated with an error.
+    *
+    * The stream will complete normally only when an [[IbDisconnectOk]] message is published (this
+    * will be the last message). This "graceful disconnect" is initiated when the stream is
+    * `cancel`ed.
+    *
+    * The stream is completed with an error when an [[IbDisconnectError]]
+    * is encountered. // TODO: how to wrap this.
+    *
+    * More than one connection cannot be created: subsequent Publishers will
+    * immediately complete with an error.
+    */
+  def connection(host: String = settings.ibc.host,
+                 port: Int = settings.ibc.port,
+                 clientId: Int = settings.ibc.clientId,
+                 serverLogLevel: ServerLogLevel = ServerLogLevel.ERROR): Publisher[SystemMessage] = {
+    IbPublisher(IbConnect(host, port, clientId)) {
+      conn ! SetServerLogLevel(serverLogLevel)
+      conn ! ReqIds(1)  // per IB API manual
+      conn ! ReqCurrentTime()
+      conn ! ReqNewsBulletins(allMsgs = true)
+    }
+  }
 
-  def scannerParameters: xml.Document
+  def scannerParameters(implicit mat: akka.stream.Materializer,
+                        ec: scala.concurrent.ExecutionContext): Future[xml.Elem] =
+    Future { <bright/> }
 
-  def news: Publisher[UpdateNewsBulletin]
+  // news bulletins will go to the connection stream. Can be filtered out / replicated from there.
+  // def news: Publisher[UpdateNewsBulletin]
 
   // TODO: idea: a message bus for exchanges; subscribe to an exchange and get available / not available
   // also: for data farms
@@ -75,8 +111,25 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
 
   // TODO: verify this really has RPC semantics.
   // cancel if timeout?
-  // careful not to parse XML on socket receiver thread
-  def fundamentals(contract: Contract): Future[xml.Document]
+
+  /**
+    * @param contract
+    * @param reportType
+    * @param mat
+    * @param ec
+    * @return
+    */
+  def fundamentals(
+    contract: Contract,
+    reportType: FundamentalType.Value)(implicit mat: akka.stream.Materializer,
+                                       ec: scala.concurrent.ExecutionContext): Future[xml.Elem] = {
+    import Services.PublisherToFuture
+
+    IbPublisher[String](
+      ReqFundamentalData(ReqId.next, contract, reportType))().toFuture map { ss =>
+        xml.XML.load(ss.head)
+      }
+  }
 
   /*
    * MarketData 
@@ -92,17 +145,15 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
    */
 
   def ticks(contract: Contract,
-    genericTickList: List[GenericTickType.GenericTickType],
-    snapshot: Boolean = false): Publisher[RawTickMessage] = {
+            genericTickList: List[GenericTickType.GenericTickType],
+            snapshot: Boolean = false): Publisher[RawTickMessage] = {
 
-    val reqId = ReqId.next
-    IbPublisher(ReqMktData(reqId, contract, genericTickList, snapshot), CancelMktData(reqId))
+    IbPublisher(ReqMktData(ReqId.next, contract, genericTickList, snapshot))()
   }
 
   import WhatToShow.WhatToShow
   def bars(contract: Contract, whatToShow: WhatToShow): Publisher[RealTimeBar] = {
-    val reqId = ReqId.next()
-    IbPublisher(ReqRealTimeBars(reqId, contract, 5, whatToShow, true), CancelRealTimeBars(reqId))
+    IbPublisher(ReqRealTimeBars(ReqId.next, contract, 5, whatToShow, true))()
   }
 
   def optionPrice(contract: Contract, volatility: Double): Publisher[TickOptionComputation] = ???
@@ -111,7 +162,7 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
 
   def depth(contract: Contract, rows: Int): Publisher[MarketDepthMessage] = ???
 
-  def scan(params: ScannerParameters): Future[List[ScannerData]] // TODO: verify RPC semantics
+  def scan(params: ScannerParameters): Publisher[ScannerData]
 
   // TODO: deal with requesting news. How is news returned?  
   // See https://www.interactivebrokers.com/en/software/api/apiguide/tables/requestingnews.htm
@@ -128,23 +179,22 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
    * handled within the service; just request what you want.
    */
   def hdBars(contract: Contract,
-    end: jt.ZonedDateTime,
-    duration: jt.Duration,
-    barSize: BarSize,
-    whatToShow: WhatToShow,
-    regularHoursOnly: Boolean = true): Publisher[HistoricalData] = {
+             end: jt.ZonedDateTime,
+             duration: jt.Duration,
+             barSize: BarSize,
+             whatToShow: WhatToShow,
+             regularHoursOnly: Boolean = true): Publisher[HistoricalData] = {
 
-    val reqId = ReqId.next()
     IbPublisher(
-      ReqHistoricalData(reqId, contract,
+      ReqHistoricalData(
+        ReqId.next,
+        contract,
         end.toString, // FIXME LMAO
         duration.toString, // FIXME
         barSize,
         whatToShow,
         if (regularHoursOnly) 1 else 0,
-        DateFormatType.SecondsSinceEpoch),
-      CancelHistoricalData(reqId))
-
+        DateFormatType.SecondsSinceEpoch))()
   }
 
   // implementation note: the formatDate field is hardwired to 2 (epoch seconds count)
@@ -161,43 +211,53 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
   /*
  * OrderManager {
  */
-  def cancelAll(): Unit
+
+  /**
+    * Request that all open orders be canceled.
+    *
+    * @return A [[scala.concurrent.Future]] which indicates successful transmission
+    * if the cancel request if completed successfully,
+    *  or with a failure in the (unlikely) event that the cancel request could not be transmitted.
+    *  Note that a successful completion of the `Future` does 'not' mean that all open
+    *  orders were in fact canceled.
+    */
+  def cancelAll(): Future[Unit] = ???
 
   /*
    * Internals. TODO: review scoping
    */
   import scala.language.existentials
 
-  type Msg = OutgoingMessage with HasReqId
-
   type CMap = concurrent.Map[Int, Subscriber[Any]]
   override protected lazy val streams: CMap = concurrent.TrieMap.empty[Int, Subscriber[Any]]
 
-  case class IbPublisher[T](req: Msg, cnc: Msg) extends Publisher[T] {
+  type Msg = HasRawId with Cancellable 
+
+  case class IbPublisher[T](msg: Msg)(coda: => Unit = {}) extends Publisher[T] {
 
     import java.util.concurrent.atomic.AtomicBoolean
 
     val subscribed = new AtomicBoolean(false) // no anticipation of race but why take chances
     override def subscribe(subscriber: Subscriber[_ >: T]): Unit = {
       val first = !subscribed.getAndSet(true)
-      if (first) subscriber onSubscribe IbSubscription(subscriber.asInstanceOf[Subscriber[Any]], req, cnc)
+      if (first) subscriber onSubscribe IbSubscription(subscriber.asInstanceOf[Subscriber[Any]], msg, () => coda)
     }
   }
 
-  case class IbSubscription(subscriber: Subscriber[Any], req: Msg, cnc: Msg) extends Subscription {
-    require(req.reqId == cnc.reqId)
+  case class IbSubscription(subscriber: Subscriber[Any], msg: Msg, coda: () => Unit) extends Subscription {
 
     private var r = (n: Long) => {
       require(n == Long.MaxValue) // FIXME: log this in production, no assertion  
-      streams + (req.reqId.raw -> subscriber)
-      conn ! req
+      streams + (msg.rawId -> subscriber)
+      conn ! msg
+      coda()
     }
 
     override def request(n: Long): Unit = { r(n); r = _ => () }
 
     private var c = () => {
-      streams - req.reqId.raw
-      conn ! cnc
+      streams - msg.rawId
+      conn ! msg.cancelMessage
     }
     override def cancel(): Unit = { c(); c = () => () }
   }
@@ -218,7 +278,7 @@ object Services {
 
   implicit class PublisherToFuture[M](publisher: Publisher[M])(implicit mat: akka.stream.Materializer) {
     def toFuture: Future[List[M]] = {
-      Source(publisher).fold(List.empty[M]) { (u, t) => t :: u } map (_.reverse) runWith Sink.head
+      Source.fromPublisher(publisher).fold(List.empty[M]) { (u, t) => t :: u } map (_.reverse) runWith Sink.head
     }
 
     // def toFutureSeq: Future[Seq[M]] = Source(publisher).grouped(Int.MaxValue) runWith Sink.head

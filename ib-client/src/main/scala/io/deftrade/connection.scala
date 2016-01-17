@@ -34,14 +34,14 @@ trait SubscriptionsComponent { _: IbConnectionComponent =>
 }
 
 trait SubscriptionsStub extends SubscriptionsComponent { _: IbConnectionComponent =>
-  
+
   type SEB = SubscriptionsEventBusStub
-  
+
   val subs = new SEB
 
   class SubscriptionsEventBusStub extends SubscriptionsEventBusPublishOnly {
 
-    type Classifier = Nothing  // these will make compilation impossible subscribe() called
+    type Classifier = Nothing // these will make compilation impossible subscribe() called
     type Subscriber = Nothing
 
     override def publish(event: Event): Unit = ()
@@ -60,10 +60,10 @@ trait SubscriptionsImpl extends SubscriptionsComponent { _: IbConnectionComponen
 
     import ActorDSL._
     private case class Subscribed(subscriber: ActorRef)
-    
+
     type Classifier = Class[_]
 
-  /*
+    /*
    * arguably dodgy because the reaper actor closes over the "this" pointer of the Subscriptions
    * instance... pretty sure this is OK in this instance but generally not best practice. 
    */
@@ -96,36 +96,36 @@ trait SubscriptionsImpl extends SubscriptionsComponent { _: IbConnectionComponen
 }
 
 /**
- * Trait providing access to config settings.
- */
+  * Trait providing access to config settings.
+  */
 
 trait ConfigSettings {
   def settings: SettingsImpl
 }
 
 /**
- * Implements the IbConnection actor, which manages the connection to TWS.
- */
+  * Implements the IbConnection actor, which manages the connection to TWS.
+  */
 abstract class IbConnectionComponent(val system: ActorSystem)
     extends SubscriptionsComponent with StreamsStub with IncomingMessages with OutgoingMessages with ConfigSettings {
 
   /**
-   * Configuration settings - read only.
-   */
+    * Configuration settings - read only.
+    */
 
   override final val settings = Settings(system)
 
   /**
-   * An EventBus instance which holds all the subscriptions for message deliver.
-   */
+    * An EventBus instance which holds all the subscriptions for message deliver.
+    */
 
   /**
-   * The Actor (and FSM) which manages the connection state, reads and writes messages to the
-   * socket, and publishes TWS API messages, connection status messages and error messages.
-   *
-   * The connection automatically throttles messages to avoid exceeding the rate limit set
-   * by IB (50 msgs/sec).
-   */
+    * The Actor (and FSM) which manages the connection state, reads and writes messages to the
+    * socket, and publishes TWS API messages, connection status messages and error messages.
+    *
+    * The connection automatically throttles messages to avoid exceeding the rate limit set
+    * by IB (50 msgs/sec).
+    */
   final val conn: ActorRef = {
 
     val rawConn = system.actorOf(
@@ -140,35 +140,35 @@ abstract class IbConnectionComponent(val system: ActorSystem)
   }
 
   /**
-   * Minimum TWS API client version which clients of this library may be written against.
-   */
+    * Minimum TWS API client version which clients of this library may be written against.
+    */
   final val clientVersion: Int = 62
 
   /**
-   * Minimum TWS API server version which this library supports. Note, this must never be less
-   * than 20.
-   */
+    * Minimum TWS API server version which this library supports. Note, this must never be less
+    * than 20.
+    */
   final val minServerVersion = 66
 
   /**
-   * An Actor based FSM which manages the connection to the TWS API socket.
-   *
-   * This actor will connect and disconnect based on command messages, and will send
-   * OutgoingMessages to the API socket when connected. On connection, a dedicated thread is
-   * created which reads messages from the socket and publishes them.
-   *
-   * Clients who interact with the Connection are assumed to be subscribed to ConnectionMessages
-   * and ErrorMessages. There should be no need to subscribe to the FSM state transitions,
-   * but that can be dome as well.
-   *
-   * FIXME: what happens when shutdown hits an FSM? Want to close the socket cleanly.
-   */
-  class IbConnection extends Actor with LoggingFSM[IbcImpl.State, IbcImpl.Data] {
+    * An Actor based FSM which manages the connection to the TWS API socket.
+    *
+    * This actor will connect and disconnect based on command messages, and will send
+    * OutgoingMessages to the API socket when connected. On connection, a dedicated thread is
+    * created which reads messages from the socket and publishes them.
+    *
+    * Clients who interact with the Connection are assumed to be subscribed to ConnectionMessages
+    * and ErrorMessages. There should be no need to subscribe to the FSM state transitions,
+    * but that can be dome as well.
+    *
+    * FIXME: what happens when shutdown hits an FSM? Want to close the socket cleanly.
+    */
+  class IbConnection extends Actor with Stash with LoggingFSM[IbcImpl.State, IbcImpl.Data] {
 
     import IbcImpl._
     import ErrorMessage._
     import IncomingMessages.rdz
-    import OutgoingMessages.{ wrz, OutgoingMessageValidationException }
+    import OutgoingMessages.{ wrz, ValidationException }
 
     val executor = new misc.SingleThreadPool()
 
@@ -204,7 +204,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
               val twsTime: String = rdz(dis)
               if (serverVersion < minServerVersion) {
                 silentClose(socket)
-                subs publish IbConnectError(ReasonUpdateTWS, sender, ibconn)
+                publish(IbConnectError(ReasonUpdateTWS, sender, ibconn))
                 Empty
               } else { // TODO: Log the connection
                 wrz(clientId)(os)
@@ -220,7 +220,7 @@ abstract class IbConnectionComponent(val system: ActorSystem)
             conn ! ConnectData(data)
           case Failure(ex) =>
             conn ! ConnectData(Empty)
-            subs publish IbConnectError(ReasonEx, sender, ibconn, Some(ex))
+            publish(IbConnectError(ReasonEx, sender, ibconn, Some(ex)))
         }
 
         goto(ConnectPending) using Empty
@@ -247,12 +247,20 @@ abstract class IbConnectionComponent(val system: ActorSystem)
       case Event(ConnectData(Empty), _) =>
         goto(Disconnected) using Empty
 
+      /*
+         * save messages for when we connect
+         */
+      case Event(msg: OutgoingMessage, _) =>
+        stash()
+        stay
     }
 
     onTransition {
       case ConnectPending -> Connected =>
         nextStateData match {
-          case Connection(_, _, ok) => subs publish ok
+          case Connection(_, _, ok) =>
+            unstashAll()
+            publish(ok)
           case wtf => {
             log.error(s"Connecting with bad Data: $wtf")
             throw new AssertionError("internal error: see logfile") // something's badly confused
@@ -273,11 +281,10 @@ abstract class IbConnectionComponent(val system: ActorSystem)
           os.flush() // likely superfluous, hopefully harmless
           stay
         } catch {
-          case omvx: OutgoingMessageValidationException =>
-            subs publish OutgoingError(ReasonEx, sender, msg, Some(omvx))
+          case omvx: ValidationException =>
+            publish(OutgoingError(ReasonEx, sender, msg, Some(omvx)))
             stay
           case NonFatal(ex) =>
-            subs publish OutgoingError(ReasonEx, sender, msg, Some(ex))
             goto(Disconnected) using Disconnection(
               IbDisconnectError(ReasonEx, Some(sender), Some(msg), Some(ex)))
         }
@@ -320,35 +327,67 @@ abstract class IbConnectionComponent(val system: ActorSystem)
     onTransition {
       case _ -> Disconnected =>
         nextStateData match {
-          case Disconnection(ibDisconnect) => subs publish ibDisconnect
-          case Empty => () // it's ok, Future failed and published error
-          case wtf => log.error("disconnection with no message: {}", wtf)
+          case Disconnection(ibDisconnect) => publish(ibDisconnect)
+          case Empty                       => () // it's ok, Future failed and published error
+          case wtf                         => log.error("disconnection with no message: {}", wtf)
         }
     }
 
     whenUnhandled {
       /*
-       * Except when connected, all attempts to send outgoing API messages result in error
+       * Except when connected or connection pending, 
+       * all attempts to send outgoing API messages result in error
        */
       case Event(msg: OutgoingMessage with Product, _) =>
         import OutgoingError._
-        subs publish OutgoingError(mkReason(msg, NotConnected), sender, msg)
+        publish(OutgoingError(mkReason(msg, NotConnected), sender, msg))
         stay
 
       case Event(ibconn: IbConnect, _) =>
         import IbConnectError._
         val reason = if (stateName == DisconnectPending) BadSequence else Redundant
-        subs publish IbConnectError(reason, sender, ibconn)
+        publish(IbConnectError(reason, sender, ibconn))
         stay
 
       case Event(IbDisconnect(why), _) =>
         import IbDisconnectError._
         val reason = if (stateName == ConnectPending) BadSequence else Redundant
-        subs publish IbDisconnectError(s"$reason: $why", Some(sender))
+        publish(IbDisconnectError(s"$reason: $why", Some(sender)))
         stay
     }
 
     initialize()
+
+    def publish(msg: AnyRef): Unit = {
+      msg match {
+        case ok @ IbConnectOk(_, _, _, _) =>
+          streams get IbGlobalRawId foreach { subscriber =>
+            subscriber onNext ok
+          }
+        case ce @ IbConnectError(_, _, _, _) =>
+          streams get IbGlobalRawId foreach { subscriber =>
+            subscriber onError IbException(ce)
+            streams - IbGlobalRawId
+          }
+        case ok @ IbDisconnectOk(_, _) =>
+          streams get IbGlobalRawId foreach { subscription =>
+            subscription.onComplete()
+            streams - IbGlobalRawId
+          }
+        case de @ IbDisconnectError(_, _, _, _) =>
+          streams get IbGlobalRawId foreach { subscriber =>
+            subscriber onError IbException(de)
+            streams - IbGlobalRawId
+          }
+        case oe @ OutgoingError(_, _, msg, _) =>
+          streams get msg.rawId foreach { subscriber =>
+            subscriber onError IbException(oe)
+            streams - IbGlobalRawId
+          }
+        case unhandled => // FIXME: log this
+      }
+      subs publish msg
+    }
   }
 
   /*
@@ -395,52 +434,52 @@ abstract class IbConnectionComponent(val system: ActorSystem)
       def run() {
         try while (true) {
           (rdz: Int @annotation.switch) match {
-            case 1 => TickPrice.read
-            case 2 => TickSize.read
-            case 3 => OrderStatus.read
-            case 4 => Error.read
-            case 5 => OpenOrder.read
-            case 6 => UpdateAccountValue.read
-            case 7 => UpdatePortfolio.read
-            case 8 => UpdateAccountTime.read
-            case 9 => NextValidId.read
-            case 10 => ContractDetailsCont.read
-            case 11 => ExecDetails.read
-            case 12 => UpdateMktDepth.read
-            case 13 => UpdateMktDepthL2.read
-            case 14 => UpdateNewsBulletin.read
-            case 15 => ManageAccounts.read
+            case 1   => TickPrice.read
+            case 2   => TickSize.read
+            case 3   => OrderStatus.read
+            case 4   => Error.read
+            case 5   => OpenOrder.read
+            case 6   => UpdateAccountValue.read
+            case 7   => UpdatePortfolio.read
+            case 8   => UpdateAccountTime.read
+            case 9   => NextValidId.read
+            case 10  => ContractDetailsCont.read
+            case 11  => ExecDetails.read
+            case 12  => UpdateMktDepth.read
+            case 13  => UpdateMktDepthL2.read
+            case 14  => UpdateNewsBulletin.read
+            case 15  => ManageAccounts.read
             // case 16 => ReceiveFA.read
-            case 17 => HistoricalData.read
-            case 18 => BondContractDetails.read
-            case 19 => ScannerParameters.read
-            case 20 => ScannerData.read
-            case 21 => TickOptionComputation.read
-            case 45 => TickGeneric.read
-            case 46 => TickString.read
-            case 47 => TickEFP.read
-            case 49 => CurrentTime.read
-            case 50 => RealTimeBar.read
-            case 51 => FundamentalData.read
-            case 52 => ContractDetailsEnd.read
-            case 53 => OpenOrderEnd.read
-            case 54 => AccountDownloadEnd.read
-            case 55 => ExecDetailsEnd.read
-            case 56 => DeltaNeutralValidation.read
-            case 57 => TickSnapshotEnd.read
-            case 58 => MarketDataType.read
-            case 59 => CommissionReportMsg.read
+            case 17  => HistoricalData.read
+            case 18  => BondContractDetails.read
+            case 19  => ScannerParameters.read
+            case 20  => ScannerData.read
+            case 21  => TickOptionComputation.read
+            case 45  => TickGeneric.read
+            case 46  => TickString.read
+            case 47  => TickEFP.read
+            case 49  => CurrentTime.read
+            case 50  => RealTimeBar.read
+            case 51  => FundamentalData.read
+            case 52  => ContractDetailsEnd.read
+            case 53  => OpenOrderEnd.read
+            case 54  => AccountDownloadEnd.read
+            case 55  => ExecDetailsEnd.read
+            case 56  => DeltaNeutralValidation.read
+            case 57  => TickSnapshotEnd.read
+            case 58  => MarketDataType.read
+            case 59  => CommissionReportMsg.read
             //            case 61 => Position.read
             //            case 62 => PositionEnd.read
             //            case 63 => AccountSummary.read
             //            case 64 => AccountSummaryEnd.read
 
-            case -1 => throw new TerminatedId()
+            case -1  => throw new TerminatedId()
             case unk => throw new UnknownId(unk)
           }
         } catch {
           case ct @ (_: TerminatedId | _: UnknownId) => conn ! ReaderStopped(ct)
-          case NonFatal(nfx) => conn ! ReaderStopped(nfx)
+          case NonFatal(nfx)                         => conn ! ReaderStopped(nfx)
         }
       }
     }

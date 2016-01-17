@@ -5,7 +5,7 @@ import Tests._
 object Version {
   val Scala = "2.11.7"
   val Akka = "2.4.1"
-  val AkkaStream = "2.0-M2"
+  val AkkaStream = "2.0.1"
   val ScalaTest = "2.2.4"
   val Scalactic = "2.2.4"
   val Slick = "3.1.1"
@@ -37,7 +37,10 @@ object Dependencies {
   val slickCodeGen = "com.typesafe.slick" %% "slick-codegen" % Version.Slick
   val slickPg = "com.github.tminglei" %% "slick-pg" % "0.10.2"
   val slickPgDate = "com.github.tminglei" %% "slick-pg_date2" % "0.10.2"
+
   val postgres = "org.postgresql" % "postgresql" % "9.4-1201-jdbc41"
+
+  val upickle = "com.lihaoyi" %% "upickle" % "0.3.6"
 
   val slf4j = "com.typesafe.akka" %% "akka-slf4j" % Version.Akka
   val logback = "ch.qos.logback" % "logback-classic" % "1.1.2"

@@ -49,18 +49,19 @@ lazy val ibClient = (project in file ("ib-client")).
 lazy val db = (project in file("db")).
   dependsOn(ibClient).
   settings(buildSettings: _*).
-  settings(initialCommands in console :=
-    """|import scala.concurrent.duration._
-       |import akka.testkit.{ TestActors, TestKit, ImplicitSender }
-       |import io.deftrade._
-       |import db._
-       |import Ib._
-       |object TK extends TestKit(system)
-       |import TK._
-       |""".stripMargin).
+  // settings(initialCommands in console :=
+  //   """|import scala.concurrent.duration._
+  //      |import akka.testkit.{ TestActors, TestKit, ImplicitSender }
+  //      |import io.deftrade._
+  //      |import db._
+  //      |import Ib._
+  //      |object TK extends TestKit(system)
+  //      |import TK._
+  //      |""".stripMargin).
   settings(
     libraryDependencies ++=
-      Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres, timeforscala) ++
+      Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres,
+        timeforscala, upickle) ++
       Seq(scalatest, testkit).map(_ % Test)
   )
 

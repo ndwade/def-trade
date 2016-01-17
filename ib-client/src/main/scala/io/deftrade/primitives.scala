@@ -50,11 +50,11 @@ private[deftrade] object ImplicitConversions {
 
   implicit def s2od(s: String): Option[Double] = if (s.isEmpty) None else Some(s)
   implicit def od2s(od: Option[Double]): String = (od map d2s) getOrElse ""
-  
+
   implicit def s2eor(s: String): Either[OrderId, ReqId] = {
     import scala.util.Right
-    val id: Int = s
-    if (id < ReqId.offset) Left(OrderId(id)) else Right(ReqId(id))
+    val raw: Int = s
+    if (raw < ReqId.offset) Left(OrderId.raw(raw)) else Right(ReqId.raw(raw))
   }
 
 }
@@ -65,50 +65,51 @@ import ImplicitConversions._
  * Value classes for ConId, OrderId, ReqId
  * Motivation:
  * prevent bad assignments and disallow meaningless operators (id's should be opaque and immutable)
- * limit construction and ops on ids (TODO: public for now until services better defined)
- * TODO: scala 2.10 reflection bug: can't invoke methods with Value Class params
- * https://issues.scala-lang.org/browse/SI-6411
- * when this is fixed, migrate back to Value Class
- * UPDATE: still broken in 2.11 when reflecting on value classes which are part of case classes
+ * limit construction and ops on ids
  */
 sealed trait GenId extends Any {
   def id: Int
-  def raw: Int = id
+  private[deftrade] def raw: Int = id
 }
 
 sealed abstract class GenIdCompanion[GID <: GenId](val offset: Int) {
   def apply(id: Int): GID
-  def raw(raw: Int): GID = apply(raw - offset)
+  private[deftrade] def raw(raw: Int): GID = apply(raw - offset)
   import math.Ordering
   implicit lazy val ordering: Ordering[GID] = Ordering.by[GID, Int](_.id)
   implicit def ops(i: GID) = ordering.mkOrderingOps(i)
   private[deftrade] implicit def id2s(i: GID) = i.raw.toString
   private[deftrade] implicit def s2id(s: String): GID = raw(s)
 }
-
-sealed trait AtomicCounter {
-    protected[this] val counter = new java.util.concurrent.atomic.AtomicInteger(0)
-}
-
-sealed trait AtomicSettable extends AtomicCounter {
-  def set(newValue: Int): Unit = counter.set(newValue)
-}
-
-sealed trait AtomicGenerator[GID <: GenId] extends AtomicCounter { self: GenIdCompanion[GID] =>
-  def next(): GID = apply(counter.getAndIncrement())
-}
-
 /**
- * OrderId 
+ * OrderId
+ * Note: the `next()` and `set()` methods are 'not' thread safe, and should only be invoked by an
+ * order manager component. This is consistent with the requirement that orders must be sequentially
+ * numbered - guarding against a race condition is pointless because only the order manager can
+ * be competent to assign order numbers.
  */
 case class OrderId(val id: Int) extends AnyVal with GenId
-object OrderId extends GenIdCompanion[OrderId](offset = 0) with AtomicGenerator[OrderId] with AtomicSettable
+object OrderId extends GenIdCompanion[OrderId](offset = 0) {
+  @volatile private var _next: OrderId = _ // yeah that's right kids, null
+  private[deftrade] def set(oid: OrderId): Unit = _next = oid
+  def next() = {
+    val ret = _next;
+    _next = ret.copy(id = ret.id + 1) 
+    ret
+  }
+}
 
 /**
- * ReqId 
+ * ReqId
  */
-case class ReqId(val id: Int) extends AnyVal with GenId { override def raw: Int = id + ReqId.offset }
-object ReqId extends GenIdCompanion[ReqId](offset = 0x40000000) with AtomicGenerator[ReqId]
+case class ReqId(val id: Int) extends AnyVal with GenId {
+  override private[deftrade] def raw: Int = id + ReqId.offset
+}
+object ReqId extends GenIdCompanion[ReqId](offset = 0x40000000) {
+  private val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+  def next(): ReqId = apply(counter.getAndIncrement())
+
+}
 
 /**
  *

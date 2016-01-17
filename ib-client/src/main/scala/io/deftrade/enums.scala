@@ -286,7 +286,7 @@ object AlgoStrategy extends Enumeration with HasUndefined with RxTxString {
   val Vwap, Twap, ArrivalPx, DarkIce, PctVol, AD = Value
 
   import AlgoParam.{ ValueSet => Params, _ }
-  lazy val paramsFor: Map[AlgoStrategy, Params] = Map(
+  lazy val paramsFor = Map(
     Undefined -> Params(),
     Vwap -> Params(startTime, endTime, maxPctVol, noTakeLiq, getDone, noTradeAhead, useOddLots),
     Twap -> Params(startTime, endTime, allowPastEndTime, strategyType),

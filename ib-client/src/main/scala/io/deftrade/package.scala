@@ -16,109 +16,109 @@
 package io {
 
   /**
-   * global notes
-   *
-   *
-   * cake structure: ib module needs to accept the actor system as a parameter -
-   * therefore config, pubsub, and all actors within ib - and all transitive dependencies -
-   * must be baked in the same cake. This includes IncomingMessages and OutgoingMessages, but not
-   * DTOs.
-   *
-   * moar new ideas 11/17/15
-   *
-   * usage seems to fall into some distinct request/response patterns.
-   *
-   * Pure Streams (explicit cancel, no explicit End responce)
-   *  - ticks (incl options comp)
-   *  - bars
-   *  - market depth
-   *  * frozen indicator - akin to synthetic timeout inactivity warnings (tap tap this thing on?)
-   *  - Fundamental data?! Yes, appears to be. Verify.
-   *  - Historical data - special handling; end must be calculated.
-   *  - news bullitins
-   *
-   *  Future Aggregate - self canceling, explicit End response
-   *  - ticks (no genericTickList)
-   *  - openOrders (at startup only! TODO - are End responses seen? in regular order flow?)
-   *  - reqExecutions (at startup only! TODO - check this)
-   *  - contractDetails and BondContractDetails
-   *
-   *  Stream of Aggregates - explicit Cancel, Explicit End Response
-   *  (not sure about this - thinking these are pure streams)
-   *  - account value
-   *  - Account summary
-   *  - positions
-   *  - scanner data
-   *
-   *  Pure RPC
-   *  - scanner parameters
-   *
-   *  REST-like (seems to be explicit GET and PUT analogs here)
-   *   - FA managed account stuff
-   *
-   *   ORDER STUFF -> wtf
-   *   DISPLAY GROUPS -> wtfc
-   *
-   *
-   * Clean layering: ib client should be *testable* against java api without service layer
-   * Services layer should be usable without persistence schema.
-   *
-   * Services:
-   *
-   * OrderManagementService
-   * MarketDataService
-   * HistoricalDataService
-   * ReferenceDataService
-   * AccountService
-   *
-   * No messages get sent directly to IB connection - go through service layer.
-   *
-   * Error routing: happens at Service layer. Services subscribe to all error messages
-   * and keep Map[Id, ActorRef] to further route errors.
-   * Stream type parameter needs to comprehend errors!
-   *
-   * IDs:
-   * - policy is set in the services layer
-   * - OMS manages the OrderId.
-   * - TickId = ReqId -> one space.
-   * - ReqId has an offset (Int.Max / 2 + 1 == 0x40000000)
-   * - ReqId.Offset is overrideable within the cake, for testing
-   *
-   * OMS:
-   *
-   * General functionality:
-   * - manage the orderId sequence
-   * = consolidate duplicate OrderStatus messages.
-   * - condense redundant information between OpenOrder, OrderStatus and Executions and provide a
-   * single "OrderResponse" with the consolidated data.
-   * - receive Portfolio Updates and reconcile
-   * - watchdog timer to request executions / order status if no acks (1 sec or so)
-   *
-   * - assume the "download open orders on connection" checkbox in TWS is set,
-   * but do not require it.
-   *
-   * issue: if clients don't deal with OrderId's directly, how do they issues retries idemopotently?
-   * who is responsible for retrying orders which get no response from IB servers (due to whatever).
-   * Would be best if OMS had a layer to do this.
-   *
-   * issue: routing for OrderStatus messages (etc).
-   * - route the consolidated response to the actor which made the request (or its delegate).
-   * - allow requester to provide a function which consolidates the responses.
-   * - allow other actors to subscribe to order fills generally (thru Subscriptions)
-   * - allow other actors to subscribe to consolidated order fills (thru OMS)
-   *
-   * Risk budgeting: Account should have a simple risk managment strategy - simpler than the
-   * Portfolio margin rules of IB - but could be more aggressive than a simple margin account.
-   * Risk should be checked before order sent.
-   *
-   * Keep my persistent copy of the current order number.
-   * At start up use max(my number, NextValidId).
-   *
-   * "Inactive" status: https://groups.yahoo.com/neo/groups/TWSAPI/conversations/topics/22357
-   * Multiple causes - knowing when to reuse OrderId is tricky - policy will be to burn new OrderId
-   *
-   *
-   */
+    * global notes
+    *
+    *
+    * cake structure: ib module needs to accept the actor system as a parameter -
+    * therefore config, pubsub, and all actors within ib - and all transitive dependencies -
+    * must be baked in the same cake. This includes IncomingMessages and OutgoingMessages, but not
+    * DTOs.
+    *
+    * moar new ideas 11/17/15
+    *
+    * usage seems to fall into some distinct request/response patterns.
+    *
+    * Pure Streams (explicit cancel, no explicit End responce)
+    *  - ticks (incl options comp)
+    *  - bars
+    *  - market depth
+    *  * frozen indicator - akin to synthetic timeout inactivity warnings (tap tap this thing on?)
+    *  - Fundamental data?! Yes, appears to be. Verify.
+    *  - Historical data - special handling; end must be calculated.
+    *  - news bullitins
+    *
+    *  Future Aggregate - self canceling, explicit End response
+    *  - ticks (no genericTickList)
+    *  - openOrders (at startup only! TODO - are End responses seen? in regular order flow?)
+    *  - reqExecutions (at startup only! TODO - check this)
+    *  - contractDetails and BondContractDetails
+    *
+    *  Stream of Aggregates - explicit Cancel, Explicit End Response
+    *  (not sure about this - thinking these are pure streams)
+    *  - account value
+    *  - Account summary
+    *  - positions
+    *  - scanner data
+    *
+    *  Pure RPC
+    *  - scanner parameters
+    *
+    *  REST-like (seems to be explicit GET and PUT analogs here)
+    *   - FA managed account stuff
+    *
+    *   ORDER STUFF -> wtf
+    *   DISPLAY GROUPS -> wtfc
+    *
+    *
+    * Clean layering: ib client should be *testable* against java api without service layer
+    * Services layer should be usable without persistence schema.
+    *
+    * Services:
+    *
+    * OrderManagementService
+    * MarketDataService
+    * HistoricalDataService
+    * ReferenceDataService
+    * AccountService
+    *
+    * No messages get sent directly to IB connection - go through service layer.
+    *
+    * Error routing: happens at Service layer. Services subscribe to all error messages
+    * and keep Map[Id, ActorRef] to further route errors.
+    * Stream type parameter needs to comprehend errors!
+    *
+    * IDs:
+    * - policy is set in the services layer
+    * - OMS manages the OrderId.
+    * - TickId = ReqId -> one space.
+    * - ReqId has an offset (Int.Max / 2 + 1 == 0x40000000)
+    * - ReqId.Offset is overrideable within the cake, for testing
+    *
+    * OMS:
+    *
+    * General functionality:
+    * - manage the orderId sequence
+    * = consolidate duplicate OrderStatus messages.
+    * - condense redundant information between OpenOrder, OrderStatus and Executions and provide a
+    * single "OrderResponse" with the consolidated data.
+    * - receive Portfolio Updates and reconcile
+    * - watchdog timer to request executions / order status if no acks (1 sec or so)
+    *
+    * - assume the "download open orders on connection" checkbox in TWS is set,
+    * but do not require it.
+    *
+    * issue: if clients don't deal with OrderId's directly, how do they issues retries idemopotently?
+    * who is responsible for retrying orders which get no response from IB servers (due to whatever).
+    * Would be best if OMS had a layer to do this.
+    *
+    * issue: routing for OrderStatus messages (etc).
+    * - route the consolidated response to the actor which made the request (or its delegate).
+    * - allow requester to provide a function which consolidates the responses.
+    * - allow other actors to subscribe to order fills generally (thru Subscriptions)
+    * - allow other actors to subscribe to consolidated order fills (thru OMS)
+    *
+    * Risk budgeting: Account should have a simple risk managment strategy - simpler than the
+    * Portfolio margin rules of IB - but could be more aggressive than a simple margin account.
+    * Risk should be checked before order sent.
+    *
+    * Keep my persistent copy of the current order number.
+    * At start up use max(my number, NextValidId).
+    *
+    * "Inactive" status: https://groups.yahoo.com/neo/groups/TWSAPI/conversations/topics/22357
+    * Multiple causes - knowing when to reuse OrderId is tricky - policy will be to burn new OrderId
+    *
+    *
+    */
 
   package object deftrade {
 
@@ -126,6 +126,8 @@ package io {
     // once the services subprojexts are in place.
 
     import scala.language.implicitConversions
+
+    val IbGlobalRawId = -1
 
     def indent[A: Indentable](a: A): String = misc.indent(a.toString)
 
@@ -163,8 +165,8 @@ package io.deftrade {
   }
 
   /**
-   * Access all deftrade specific config settings through this Settings object.
-   */
+    * Access all deftrade specific config settings through this Settings object.
+    */
   object Settings extends ExtensionId[SettingsImpl] with ExtensionIdProvider {
 
     override def lookup = Settings
@@ -227,9 +229,9 @@ package io.deftrade {
         ret
       }
     }
-    
+
     implicit class Piper[A](val a: A) extends AnyVal {
-      @inline def |>[B](f: A => B): B = f(a) 
+      @inline def |>[B](f: A => B): B = f(a)
     }
 
     import scala.util.{ Try, Failure }
@@ -284,12 +286,12 @@ package io.deftrade {
         final def show(i: Int = 0): String = this match {
           case Case(pfx, nvs) => s"$pfx$start${(nvs map { _.show(i + 1) }) mkString sep.toString}$end"
           case Container(pfx, vs) => vs match {
-            case Nil => s"${pfx}()"
+            case Nil         => s"${pfx}()"
             case head :: Nil => head.show(i)
-            case _ => s"$pfx(${vs map { v => s"$lsep${sindent * (i + 1)}${v.show(i + 2)}" } mkString ", "})"
+            case _           => s"$pfx(${vs map { v => s"$lsep${sindent * (i + 1)}${v.show(i + 2)}" } mkString ", "})"
           }
           case NamedValue(n, v) => s"$lsep${sindent * i}$n=${v.show(i)}"
-          case PureValue(s) => s
+          case PureValue(s)     => s
         }
       }
 
@@ -322,7 +324,7 @@ package io.deftrade {
       }
 
       def apply(s: String): String = parseAll(kase, s) match {
-        case Success(pretty, _) => pretty.show()
+        case Success(pretty, _)   => pretty.show()
         case NoSuccess(msg, rest) => msg
       }
     }

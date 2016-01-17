@@ -53,6 +53,7 @@ private[deftrade] object IncomingMessages {
     }
     step(rdz, Nil).reverse
   }
+
 }
 
 // FIXME: nonDefaultNamedValues everywhere!!!
@@ -70,19 +71,19 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   import IncomingMessages._
 
   /**
-   * Marker trait for all messages which may be subscribed to from the subs EventBus.
-   */
+    * Marker trait for all messages which may be subscribed to from the subs EventBus.
+    */
   sealed trait IncomingMessage
 
   /**
-   * A message sent from the TWS API. Instances of these messages can read from the socket using
-   * the read method in the companion objects.
-   */
+    * A message sent from the TWS API. Instances of these messages can read from the socket using
+    * the read method in the companion objects.
+    */
   trait ApiMessage extends IncomingMessage
 
   /**
-   * Marker for _any_ message with error semantics. Mixed into ConnectionMessage and ApiMessage.
-   */
+    * Marker for _any_ message with error semantics. Mixed into ConnectionMessage and ApiMessage.
+    */
   trait ErrorMessage extends IncomingMessage
   object ErrorMessage {
     val ReasonEx = "Exception"
@@ -105,8 +106,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   trait MarketDepthMessage extends MarketDataMessage // (for regular and L2)
 
   /**
-   * Signals TWS connection status change - or attempted change.
-   */
+    * Signals TWS connection status change - or attempted change.
+    */
   trait IbConnectionMessage extends SystemMessage
 
   /*
@@ -115,8 +116,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
    * - BUT: only one results in connection; 3 others leave you in disconnected state.  
    */
   /**
-   * Signals that the connection to IB was made.
-   */
+    * Signals that the connection to IB was made.
+    */
   case class IbConnectOk(
     sender: ActorRef,
     msg: IbConnect,
@@ -126,10 +127,10 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * Signals an error when attempting to connect to the TWS API.
-   * - already connected
-   * - exception thrown connecting
-   */
+    * Signals an error when attempting to connect to the TWS API.
+    * - already connected
+    * - exception thrown connecting
+    */
   case class IbConnectError(
     reason: String,
     sender: ActorRef,
@@ -149,12 +150,12 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * Signals an abnormal disconnect from the TWS API.
-   * - already disconnected
-   * - abnormal disconnect: IOException throw by Reader
-   * - server termination API code (-1)
-   * - abnormal disconnect: exception thrown while writing (OutgoingError also sent)
-   */
+    * Signals an abnormal disconnect from the TWS API.
+    * - already disconnected
+    * - abnormal disconnect: IOException throw by Reader
+    * - server termination API code (-1)
+    * - abnormal disconnect: exception thrown while writing
+    */
   case class IbDisconnectError(
     reason: String, // let's always have one, OK?
     sender: Option[ActorRef] = None,
@@ -168,11 +169,10 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * Signals errors which occur when sending messages to the TWS API socket.
-   * - tried to send while not connected
-   * - validation error (bad params given versions)
-   * - thrown exception sending - disconnects (IbDisconnectError also sent)
-   */
+    * Signals errors which occur when sending messages to the TWS API socket.
+    * - tried to send while not connected
+    * - validation error (bad params given versions)
+    */
   case class OutgoingError(
     reason: String,
     sender: ActorRef,
@@ -187,19 +187,18 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     def mkReason(msg: MsgType, detail: String): String = s"${msg.productPrefix}: $detail"
   }
 
+  case class IbException(errMsg: ErrorMessage) extends RuntimeException(errMsg.toString)
+
   /**
-   * Codes and messages should be considered part of the API specification. Note this is the only
-   * place where the TWS API notion of "error codes" is retained.
-   */
+    * Codes and messages should be considered part of the API specification. Note this is the only
+    * place where the TWS API notion of "error codes" is retained.
+    */
   case class Error(eid: Either[OrderId, ReqId], errorCode: Int, errorMsg: String)
       extends Throwable(s"$errorCode: $errorMsg") with SystemMessage with ErrorMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
   object Error {
-    // TODO: add moar codes
-    //    val UnknownId = (505, "Fatal Error: Unknown message id.")
-    //    val UnknownContract = (517, "Unknown contract. Verify the contract details supplied.")
     val code = 4
     def read(implicit input: DataInputStream): Unit = {
       val version: Int = rdz
@@ -207,29 +206,38 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
       val err =
         if (version < 2) Error(eid = id, errorCode = -1, errorMsg = rdz)
         else Error(eid = id, errorCode = rdz, errorMsg = rdz)
-      // FIXME: this is pretty broken for id == -1
-      streams get id foreach { s => s onError err; streams - id }
+      val osub = streams get id
+      if (id == -1 || osub.isEmpty) {
+        streams.get(-1) foreach { _ onNext err }
+      } else {
+        osub.get onError IbException(err)
+        streams - id
+      }
       subs publish err
     }
   }
 
   /**
-   *
-   */
-  case class NextValidId(orderId: OrderId) extends SystemMessage {
+    *
+    */
+  case class NextValidId(orderId: OrderId) extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object NextValidId {
     val code = 9
     def read(implicit input: DataInputStream): Unit = {
       rdz // version field unused
-      subs publish NextValidId(orderId = rdz)
+      val orderId = rdz
+      OrderId set orderId
+      val nvi = NextValidId(orderId)
+      streams get -1 foreach { _ onNext nvi }
+      subs publish nvi
     }
   }
 
   /**
-   *
-   */
+    *
+    */
   case class CurrentTime(time: Long) extends SystemMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -238,13 +246,15 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     val code = 49
     def read(implicit input: DataInputStream): Unit = {
       rdz // unused version field
-      subs publish CurrentTime(time = rdz)
+      val ct = CurrentTime(time = rdz)
+      streams get -1 foreach { _ onNext ct }
+      subs publish ct
     }
   }
 
   import NewsType.NewsType
   case class UpdateNewsBulletin(msgId: Int, msgType: NewsType, message: String,
-      origExchange: String) extends SystemMessage {
+                                origExchange: String) extends SystemMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -252,17 +262,18 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     val code = 14
     def read(implicit input: DataInputStream): Unit = {
       rdz // version is unused
-      subs publish UpdateNewsBulletin(msgId = rdz,
-        msgType = rdz, message = rdz, origExchange = rdz)
+      val unb = UpdateNewsBulletin(msgId = rdz, msgType = rdz, message = rdz, origExchange = rdz)
+      streams get -1 foreach { _ onNext unb }
+      subs publish unb
     }
   }
 
   import MktDataType._
   /**
-   * This message signals a switch between real-time and frozen data.
-   * It is delivered per data subscription and should be folded in to the stream response,
-   * to be acted on programmatically per stream.
-   */
+    * This message signals a switch between real-time and frozen data.
+    * It is delivered per data subscription and should be folded in to the stream response,
+    * to be acted on programmatically per stream.
+    */
   case class MarketDataType(reqId: ReqId, marketDataType: MktDataType) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -276,8 +287,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * 
-   */
+    *
+    */
   case class ScannerParameters(xml: String) extends SystemMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -291,8 +302,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
 
   import TickType._
   /**
-   *
-   */
+    *
+    */
   case class TickPrice(tickerId: ReqId, field: TickType, price: Double, canAutoExecute: Boolean)
       extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
@@ -411,11 +422,11 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     }
   }
   /**
-   *
-   */
+    *
+    */
   case class TickEFP(tickerId: ReqId, tickType: TickType, basisPoints: Double,
-      formattedBasisPoints: String, impliedFuture: Double, holdDays: Int,
-      futureExpiry: String, dividendImpact: Double, dividendsToExpiry: Double) extends RawTickMessage {
+                     formattedBasisPoints: String, impliedFuture: Double, holdDays: Int,
+                     futureExpiry: String, dividendImpact: Double, dividendsToExpiry: Double) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
   case object TickEFP {
@@ -429,8 +440,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class TickSnapshotEnd(reqId: ReqId) extends RawTickMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -443,11 +454,11 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class RealTimeBar(tickerId: ReqId, time: Long,
-      open: Double, high: Double, low: Double, close: Double,
-      volume: Long, wap: Double, count: Int) extends MarketDataMessage {
+                         open: Double, high: Double, low: Double, close: Double,
+                         volume: Long, wap: Double, count: Int) extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
 
@@ -465,7 +476,7 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   import DeepSide.DeepSide
 
   case class UpdateMktDepth(tickerId: ReqId, position: Int, operation: DeepType,
-      side: DeepSide, price: Double, size: Int) extends MarketDepthMessage {
+                            side: DeepSide, price: Double, size: Int) extends MarketDepthMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateMktDepth {
@@ -478,7 +489,7 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   case class UpdateMktDepthL2(tickerId: ReqId, position: Int, marketMaker: String,
-      operation: DeepType, side: DeepSide, price: Double, size: Int) extends MarketDepthMessage {
+                              operation: DeepType, side: DeepSide, price: Double, size: Int) extends MarketDepthMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateMktDepthL2 {
@@ -491,11 +502,11 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * Scanner data is deemed to be Market Data because it is derived from current market quotes,
-   * in the much same sense as real time bars are derived from market data.
-   */
+    * Scanner data is deemed to be Market Data because it is derived from current market quotes,
+    * in the much same sense as real time bars are derived from market data.
+    */
   case class ScannerData(val reqId: ReqId, rank: Int, contractDetails: ContractDetails,
-    distance: String, benchmark: String, projection: String, legsStr: String)
+                         distance: String, benchmark: String, projection: String, legsStr: String)
       extends MarketDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -531,8 +542,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class HistoricalData(
       reqId: ReqId, date: String,
       open: Double, high: Double, low: Double, close: Double,
@@ -541,9 +552,9 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * Modification to the IB library protocol, which simply calls historicalData again with
-   * some magic values. This change makes HistoricalData behave more like ScannerData.
-   */
+    * Modification to the IB library protocol, which simply calls historicalData again with
+    * some magic values. This change makes HistoricalData behave more like ScannerData.
+    */
   case class HistoricalDataEnd(reqId: ReqId, startDate: String, endDate: String) extends HistoricalDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -567,9 +578,9 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * Fundamental data is deemed to be historical data because it is derived from historical
-   * (not current) market prices.
-   */
+    * Fundamental data is deemed to be historical data because it is derived from historical
+    * (not current) market prices.
+    */
   case class FundamentalData(reqId: ReqId, data: String) extends HistoricalDataMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -577,13 +588,18 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     val code = 51
     def read(implicit input: DataInputStream): Unit = {
       rdz // unused version
-      subs publish FundamentalData(reqId = rdz, data = rdz)
+      val fd = FundamentalData(reqId = rdz, data = rdz)
+      streams.get(fd.reqId.raw) foreach { s =>
+        s.onNext(fd)
+        s.onComplete()
+      }
+      subs publish fd
     }
   }
 
   /**
-   *
-   */
+    *
+    */
   case class ContractDetailsCont(reqId: ReqId, contractDetails: ContractDetails)
       extends ReferenceDataMessage {
     override def toString: String = nonDefaultNamedValues
@@ -668,8 +684,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class OpenOrder(orderId: OrderId, contract: Contract, order: Order, orderState: OrderState)
       extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
@@ -854,8 +870,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class OpenOrderEnd() extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -870,8 +886,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
 
   import OrderStatusEnum._
   /**
-   *
-   */
+    *
+    */
   case class OrderStatus( // FIXME: use some defaults here...
       orderId: OrderId, status: OrderStatusEnum, filled: Int,
       remaining: Int, avgFillPrice: Double,
@@ -894,9 +910,9 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * DeltaNeutralValidation is deemed to be an OrderManagementMessage because it confirms
-   * validation of an outstanding order.
-   */
+    * DeltaNeutralValidation is deemed to be an OrderManagementMessage because it confirms
+    * validation of an outstanding order.
+    */
   case class DeltaNeutralValidation(reqId: ReqId, underComp: UnderComp) extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -912,8 +928,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class ExecDetails(reqId: ReqId, contract: Contract, exec: Execution) extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -952,8 +968,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   *
-   */
+    *
+    */
   case class ExecDetailsEnd(reqId: ReqId) extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -966,9 +982,9 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   /**
-   * CommissionReportMsg is deemed to be an OrderManagementMessage because it can be joined
-   * (through the execId) to the OrderId that resulted in the commission charge.
-   */
+    * CommissionReportMsg is deemed to be an OrderManagementMessage because it can be joined
+    * (through the execId) to the OrderId that resulted in the commission charge.
+    */
   case class CommissionReportMsg(commissionReport: CommissionReport) extends OrderManagementMessage {
     override def toString: String = nonDefaultNamedValues
   }
@@ -985,10 +1001,10 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
 
   import Currency._
   /**
-   *
-   */
+    *
+    */
   case class UpdateAccountValue(key: String, value: String, currency: Currency,
-      accountName: String) extends AccountMessage {
+                                accountName: String) extends AccountMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdateAccountValue {
@@ -1001,8 +1017,8 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   }
 
   case class UpdatePortfolio(contract: Contract, position: Int, marketPrice: Double,
-      marketValue: Double, averageCost: Double, unrealizedPNL: Double,
-      realizedPNL: Double, accountName: String) extends AccountMessage {
+                             marketValue: Double, averageCost: Double, unrealizedPNL: Double,
+                             realizedPNL: Double, accountName: String) extends AccountMessage {
     override def toString: String = nonDefaultNamedValues
   }
   object UpdatePortfolio {
@@ -1066,10 +1082,10 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
   def dbg(msgs: String*) = msgs foreach { subs publish Debug(_) }
 
   /**
-   * Used for debugging the deserialization logic. Import the names from this module
-   * with a read() method and every zero-terminated string read from the socket input stream
-   * will be published as a Debug message.
-   */
+    * Used for debugging the deserialization logic. Import the names from this module
+    * with a read() method and every zero-terminated string read from the socket input stream
+    * will be published as a Debug message.
+    */
   object Dbg {
     def rdz(implicit input: DataInputStream): String = {
       val s = IncomingMessages.rdz
