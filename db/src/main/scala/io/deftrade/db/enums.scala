@@ -18,18 +18,17 @@ package io.deftrade.db
 import com.github.tminglei.slickpg._
 
 /**
- * Mixin trait for implicit conversion of Enumeration values to
- * Slick column types (with extension methods).
- *
- * The mixin strategy relies on Scala rules for the implicit search path: because the enum values
- * are type parameters of the mapping type constructors, the implicit scope of those type parameters
- * is searched: this includes the enclosing object, which is the Enumeration.
- */
+  * Mixin trait for implicit conversion of Enumeration values to
+  * Slick column types (with extension methods).
+  *
+  * The mixin strategy relies on Scala rules for the implicit search path: because the enum values
+  * are type parameters of the mapping type constructors, the implicit scope of those type parameters
+  * is searched: this includes the enclosing object, which is the Enumeration.
+  */
 trait SlickPgImplicits { self: Enumeration =>
 
-  import PgEnumSupportUtils.{ buildCreateSql, buildDropSql }
-  def createSql = buildCreateSql(self.toString, self, quoteName = false)
-  def dropSql = buildDropSql(self.toString, quoteName = false)
+  def createSql = PgEnumSupportUtils.buildCreateSql(self.toString, self, quoteName = false)
+  def dropSql = PgEnumSupportUtils.buildDropSql(self.toString, quoteName = false)
 
   import DefTradePgDriver.{
     createEnumJdbcType,
@@ -51,22 +50,6 @@ object SlickPgImplicits {
   }
 }
 
-object RfStatementType extends Enumeration with SlickPgImplicits {
-  type RfStatementType = Value
-  val INC, BAL, CAS = Value
-  val desc = List(INC -> "Income", BAL -> "Balance Sheet", CAS -> "Cash FLow").toMap.withDefault(_ => "UNK")
-}
-
-object SecType extends Enumeration with SlickPgImplicits {
-  type SecType = Value
-  val dummy = Value
-}
-
-object ExchangeOs extends Enumeration with SlickPgImplicits {
-  type ExchangeOs = Value
-  val dummy = Value
-}
-
 object EnumPickler {
 
   import upickle.default.{ Reader, Writer }
@@ -78,15 +61,34 @@ object EnumPickler {
   def apply(e: Enumeration) = (enum2Reader(e), enum2Writer(e))
 }
 
-object EnumImplicits {
-  implicit val (rdSecType, wrSecType) = EnumPickler(SecType)
-  implicit val (rdRfST, wrRfST) = EnumPickler(RfStatementType)
+//object EnumImplicits {
+//  implicit val (rdSecType, wrSecType) = EnumPickler(SecType)
+//  implicit val (rdRfST, wrRfST) = EnumPickler(RfStatementType)
+//}
 
-  implicit class PgEnum(val e: Enumeration) extends AnyVal {
-    import PgEnumSupportUtils.{ buildCreateSql, buildDropSql }
-    def createSql = buildCreateSql(e.toString, e, quoteName = false)
-    def dropSql = buildDropSql(e.toString, quoteName = false)
+object EnumConverter {
+  case class StringMap[E1 <: Enumeration, E2 <: Enumeration](val e1: E1, val e2: E2) {
+    val f: E1#Value => e2.Value = v => e2 withName v.toString
   }
+  implicit class EC[E1 <: Enumeration](val v: E1#Value) {
+    /**
+      * Returns an `Option[e2.Value]`. Need to return an `Option` because it's not possible to
+      * guarantee that the scala Enumeration and the postgres enum are updated in sync. Each
+      * enumerated type is well motivated (don't want to use simple strings in the database - schema
+      * would lose info and integrity) but there needs to be a single point which exposes the
+      * potential for mismatch. This is it. In critical case can map to a default value, log,
+      * and go on (e.g. live trading where the exact recording of every detail may be secondary
+      * to not crashing right then and there).
+      */
+    def to[E2 <: Enumeration](implicit ev: StringMap[E1, E2]): Option[ev.e2.Value] =
+      scala.util.Try(ev.f(v)).toOption
+  }
+//  implicit val secTypeStringIdentity = new StringMap(io.deftrade.SecType, SecType) {
+//    override val f: io.deftrade.SecType.type#Value => e2.Value = Map(
+//      e1.FUT -> e2.dummy,
+//      e1.BOND -> e2.dummy
+//    )
+//  }
 }
 
 object IfThisCompilesItWorks {
@@ -94,5 +96,7 @@ object IfThisCompilesItWorks {
   import slick.jdbc.JdbcType
   import DefTradePgDriver.EnumColumnExtensionMethods
   import DefTradePgDriver.api._
+  import EnumConverter._
+  import scala.language.implicitConversions
 
 }

@@ -609,7 +609,7 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     val code = 10
     def read(implicit input: DataInputStream): Unit = {
       val version: Int = rdz
-      val reqId = if (version >= 3) rdz else "-1"
+      val reqId: ReqId = if (version >= 3) rdz else "-1"
       val symbol, secType, expiry, strike, right, exchange, currency, localSymbol, marketName = rdz
       val tradingClass, conId, minTick, multiplier, orderTypes, validExchanges = rdz
       val priceMagnifier = rdzIf(version >= 2)
@@ -619,7 +619,7 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
       val evRule, evMultiplier = rdzIf(version >= 8)
       val secIdList: List[(String, String)] = if (version >= 7) readList { (rdz, rdz) } else Nil
 
-      subs publish ContractDetailsCont(reqId, ContractDetails(
+      val contractDetails = ContractDetails(
         summary = Contract(
           symbol = symbol, secType = secType, expiry = expiry, strike = strike, right = right,
           exchange = exchange, currency = currency, localSymbol = localSymbol,
@@ -630,7 +630,9 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
         underConId = underConId, longName = longName, contractMonth = contractMonth,
         industry = industry, category = category, subcategory = subcategory,
         timeZoneId = timeZoneId, tradingHours = tradingHours, liquidHours = liquidHours,
-        evRule = evRule, evMultiplier = evMultiplier, secIdList = secIdList))
+        evRule = evRule, evMultiplier = evMultiplier, secIdList = secIdList)
+      streams get reqId.raw foreach { _ onNext contractDetails }
+      subs publish ContractDetailsCont(reqId, contractDetails)
     }
   }
 
@@ -642,7 +644,9 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     val code = 52
     def read(implicit input: DataInputStream): Unit = {
       rdz // version field unused
-      subs publish ContractDetailsEnd(reqId = rdz)
+      val reqId: ReqId = rdz
+      streams get reqId.raw foreach { _.onComplete() }
+      subs publish ContractDetailsEnd(reqId)
     }
   }
 
@@ -654,7 +658,7 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
     val code = 18
     def read(implicit input: DataInputStream, serverVersion: Int): Unit = {
       val version: Int = rdz
-      val reqId = if (version >= 3) rdz else "-1"
+      val reqId: ReqId = if (version >= 3) rdz else "-1"
       val symbol, secType = rdz
       val cusip, coupon, maturity, issueDate, ratings, bondType, couponType, convertible = rdz
       val callable, putable, descAppend, exchange, currency, marketName, tradingClass = rdz
@@ -663,24 +667,25 @@ trait IncomingMessages { self: SubscriptionsComponent with StreamsComponent with
       val longName = rdzIf(version >= 4)
       val evRule, evMultiplier = rdzIf(version >= 6)
       val secIdList = if (version >= 5) readList { (rdz, rdz) } else Nil
-      subs publish BondContractDetails(reqId = reqId,
-        contract = ContractDetails(
-          marketName = marketName,
-          minTick = minTick,
-          orderTypes = orderTypes,
-          validExchanges = validExchanges,
-          longName = longName,
-          evRule = evRule, evMultiplier = evMultiplier,
-          secIdList = secIdList,
-          summary = Contract(
-            symbol = symbol, secType = secType, conId = conId,
-            exchange = exchange, currency = currency, tradingClass = tradingClass),
-          cusip = cusip, coupon = coupon, maturity = maturity, issueDate = issueDate,
-          ratings = ratings, bondType = bondType, couponType = couponType,
-          convertible = convertible, callable = callable, putable = putable,
-          descAppend = descAppend,
-          nextOptionDate = nextOptionDate, nextOptionType = nextOptionType,
-          nextOptionPartial = nextOptionPartial, notes = notes))
+      val contractDetails = ContractDetails(
+        marketName = marketName,
+        minTick = minTick,
+        orderTypes = orderTypes,
+        validExchanges = validExchanges,
+        longName = longName,
+        evRule = evRule, evMultiplier = evMultiplier,
+        secIdList = secIdList,
+        summary = Contract(
+          symbol = symbol, secType = secType, conId = conId,
+          exchange = exchange, currency = currency, tradingClass = tradingClass),
+        cusip = cusip, coupon = coupon, maturity = maturity, issueDate = issueDate,
+        ratings = ratings, bondType = bondType, couponType = couponType,
+        convertible = convertible, callable = callable, putable = putable,
+        descAppend = descAppend,
+        nextOptionDate = nextOptionDate, nextOptionType = nextOptionType,
+        nextOptionPartial = nextOptionPartial, notes = notes)
+      streams get reqId.raw foreach { _ onNext contractDetails }
+      subs publish BondContractDetails(reqId, contractDetails)
     }
   }
 

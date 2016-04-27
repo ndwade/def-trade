@@ -51,6 +51,19 @@ trait StreamsStub extends StreamsComponent {
 trait Services extends StreamsComponent { self: IbConnectionComponent with OutgoingMessages with IncomingMessages with ConfigSettings =>
 
   import ServerLogLevel.{ ServerLogLevel }
+
+  //06:40:35:735 -> Error[eid=Left(OrderId(-1)); errorCode=2103; errorMsg=Market data farm connection is broken:usfarm]
+  //06:40:36:790 -> Error[eid=Left(OrderId(-1)); errorCode=2104; errorMsg=Market data farm connection is OK:usfarm]
+  //11:59:42:859 -> Error[eid=Left(OrderId(-1)); errorCode=2103; errorMsg=Market data farm connection is broken:usfarm]
+  //11:59:43:515 -> Error[eid=Left(OrderId(-1)); errorCode=2103; errorMsg=Market data farm connection is broken:usfarm]
+  //11:59:48:172 -> Error[eid=Left(OrderId(-1)); errorCode=2104; errorMsg=Market data farm connection is OK:usfarm]
+  //16:19:58:307 -> Error[eid=Left(OrderId(-1)); errorCode=2103; errorMsg=Market data farm connection is broken:usfarm]
+  //16:19:59:447 -> Error[eid=Left(OrderId(-1)); errorCode=2104; errorMsg=Market data farm connection is OK:usfarm]
+
+  //23:44:43:231 -> Error[eid=Left(OrderId(-1)); errorCode=1100; errorMsg=Connectivity between IB and Trader Workstation has been lost.]
+  //23:44:45:390 -> Error[eid=Left(OrderId(-1)); errorCode=1102; errorMsg=Connectivity between IB and Trader Workstation has been restored - data maintained.]
+  //19:54:05:435 -> Error[eid=Left(OrderId(-1)); errorCode=1100; errorMsg=Connectivity between IB and Trader Workstation has been lost.]
+  //19:54:06:189 -> IbDisconnectError(Exception,None,None,Some(java.io.EOFException))
   /**
     * A [[org.reactivestreams.Publisher]] for a stream of all system messages for a connection.
     *
@@ -79,7 +92,7 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
                  serverLogLevel: ServerLogLevel = ServerLogLevel.ERROR): Publisher[SystemMessage] = {
     IbPublisher(IbConnect(host, port, clientId)) {
       conn ! SetServerLogLevel(serverLogLevel)
-      conn ! ReqIds(1)  // per IB API manual
+      conn ! ReqIds(1) // per IB API manual
       conn ! ReqCurrentTime()
       conn ! ReqNewsBulletins(allMsgs = true)
     }
@@ -107,7 +120,10 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
 
       wrz(includeExpired, secIdType, secId)
    */
-  def contractDetails(contract: Contract): Publisher[ContractDetails]
+
+  def contractDetails(contract: Contract): Publisher[ContractDetails] = {
+    IbPublisher[ContractDetails](ReqContractDetails(ReqId.next, contract)){}
+  }
 
   // TODO: verify this really has RPC semantics.
   // cancel if timeout?
@@ -126,7 +142,7 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
     import Services.PublisherToFuture
 
     IbPublisher[String](
-      ReqFundamentalData(ReqId.next, contract, reportType))().toFuture map { ss =>
+      ReqFundamentalData(ReqId.next, contract, reportType)){}.toFuture map { ss =>
         xml.XML.load(ss.head)
       }
   }
@@ -135,25 +151,16 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
    * MarketData 
    */
 
-  case class TockedTick[T <: RawTickMessage](val ts: Long, tick: T) // maybe just store in db?
-  /*
-   * use cases:
-   * - not every use of a tick requires a timestamp - e.g. a trading algo based on raw ticks
-   * only has a sense of "now" - so adding a timestamp to all ticks is needless delay
-   * - however, reconstructing some derived streams (e.g bars from ticks) from persisted data
-   * will require the persistence of a timestamp per tick (e.g. a TockedTick
-   */
-
   def ticks(contract: Contract,
             genericTickList: List[GenericTickType.GenericTickType],
             snapshot: Boolean = false): Publisher[RawTickMessage] = {
 
-    IbPublisher(ReqMktData(ReqId.next, contract, genericTickList, snapshot))()
+    IbPublisher(ReqMktData(ReqId.next, contract, genericTickList, snapshot)){}
   }
 
   import WhatToShow.WhatToShow
   def bars(contract: Contract, whatToShow: WhatToShow): Publisher[RealTimeBar] = {
-    IbPublisher(ReqRealTimeBars(ReqId.next, contract, 5, whatToShow, true))()
+    IbPublisher(ReqRealTimeBars(ReqId.next, contract, 5, whatToShow, true)){}
   }
 
   def optionPrice(contract: Contract, volatility: Double): Publisher[TickOptionComputation] = ???
@@ -194,7 +201,7 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
         barSize,
         whatToShow,
         if (regularHoursOnly) 1 else 0,
-        DateFormatType.SecondsSinceEpoch))()
+        DateFormatType.SecondsSinceEpoch)){}
   }
 
   // implementation note: the formatDate field is hardwired to 2 (epoch seconds count)
@@ -231,9 +238,9 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
   type CMap = concurrent.Map[Int, Subscriber[Any]]
   override protected lazy val streams: CMap = concurrent.TrieMap.empty[Int, Subscriber[Any]]
 
-  type Msg = HasRawId with Cancellable 
+  type Msg = HasRawId with Cancellable
 
-  case class IbPublisher[T](msg: Msg)(coda: => Unit = {}) extends Publisher[T] {
+  case class IbPublisher[T](msg: Msg)(coda: => Unit) extends Publisher[T] {
 
     import java.util.concurrent.atomic.AtomicBoolean
 
@@ -258,7 +265,10 @@ trait Services extends StreamsComponent { self: IbConnectionComponent with Outgo
 
     private var c = () => {
       streams - msg.rawId
-      conn ! msg.cancelMessage
+      msg.cancelMessage match {
+        case DummyCancel   => ()
+        case cancelMessage => conn ! msg.cancelMessage
+      }
     }
     override def cancel(): Unit = { c(); c = () => () }
   }

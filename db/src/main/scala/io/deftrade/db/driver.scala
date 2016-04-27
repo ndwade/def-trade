@@ -17,27 +17,36 @@ package io.deftrade.db
 
 import slick.driver.PostgresDriver
 import com.github.tminglei.slickpg._
-
+import java.time.OffsetDateTime
 
 trait DefTradePgDriver extends ExPostgresDriver
     with PgArraySupport
     with PgDate2Support
+    with PgRangeSupport
     with PgJsonSupport
     with PgEnumSupport {
 
   override def pgjson = "jsonb"
 
+  bindPgTypeToScala("tstzrange", scala.reflect.classTag[Range[OffsetDateTime]])
+
   object _API extends API
-    with ArrayImplicits
-    with DateTimeImplicits
-    with JsonImplicits
+      with ArrayImplicits
+      with DateTimeImplicits
+      with RangeImplicits
+      with JsonImplicits {
+
+    import java.time.{ format, OffsetDateTime }
+    import PgRangeSupportUtils.mkRangeFn
+    val pgOffsetDateTimeFormatter = format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ssx")
+    implicit val simpleOffsetDateTimeRangeTypeMapper =
+      new GenericJdbcType[Range[OffsetDateTime]]("tstzrange", mkRangeFn { s =>
+        OffsetDateTime.parse(s, pgOffsetDateTimeFormatter)
+      })
+  }
 
   override val api = _API
 
 }
 
 object DefTradePgDriver extends DefTradePgDriver
-
-abstract class IdCompanion[ID <: slick.lifted.MappedToBase](implicit ord: Ordering[ID#Underlying]) {
-  implicit val ordering = Ordering.by((id: ID) => id.value)
-}

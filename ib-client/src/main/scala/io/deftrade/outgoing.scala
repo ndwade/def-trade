@@ -32,7 +32,7 @@ private[deftrade] object OutgoingMessages {
   // TODO: support FA messages
 
   import java.io.{ DataInputStream, OutputStream, IOException }
-  
+
   @inline def _wrz(s: String)(implicit os: OutputStream) {
     os write s.getBytes("US-ASCII")
     os write (0: Byte) // putting the z in wrz
@@ -78,7 +78,7 @@ trait OutgoingMessages { _: ConfigSettings =>
   case class IbConnect(host: String = settings.ibc.host,
                        port: Int = settings.ibc.port,
                        clientId: Int = settings.ibc.clientId) extends HasRawId with Cancellable {
-    
+
     def rawId = IbGlobalRawId
     def cancelMessage = IbDisconnect("system stream cancel")
   }
@@ -237,12 +237,18 @@ trait OutgoingMessages { _: ConfigSettings =>
     val api = (14, 1)
   }
 
+  object DummyCancel extends OutgoingMessage {
+    def rawId = IbGlobalRawId
+    def write(implicit out: OutputStream, serverVersion: Int): Unit = ()
+  }
   /**
     *
     */
-  case class ReqContractDetails(reqId: ReqId, contract: Contract) extends OutgoingMessage {
+  case class ReqContractDetails(reqId: ReqId, contract: Contract) extends OutgoingMessage with Cancellable {
 
     def rawId = reqId.raw
+    def cancelMessage = DummyCancel
+    
     def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
       import ReqContractDetails._
@@ -272,10 +278,9 @@ trait OutgoingMessages { _: ConfigSettings =>
   }
 
   case class PlaceOrder(id: OrderId = "", contract: Contract, order: Order)
-      extends OutgoingMessage with Cancellable {
+      extends OutgoingMessage {
 
     def rawId = id.raw
-    def cancelMessage = CancelOrder(id)
 
     def write(implicit out: OutputStream, serverVersion: Int): Unit = {
 
@@ -463,7 +468,7 @@ trait OutgoingMessages { _: ConfigSettings =>
                                useRTH: Int,
                                formatDate: DateFormatType.DateFormatType)
       extends OutgoingMessage with Cancellable {
-    
+
     import ReqHistoricalData._
 
     def rawId = reqId.raw
@@ -609,10 +614,10 @@ trait OutgoingMessages { _: ConfigSettings =>
                              useRTH: Boolean) extends OutgoingMessage with Cancellable {
 
     import ReqRealTimeBars._
-    
+
     def rawId = tickerId.raw
     def cancelMessage = CancelRealTimeBars(tickerId)
-    
+
     def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass) {
@@ -659,10 +664,10 @@ trait OutgoingMessages { _: ConfigSettings =>
       reportType: FundamentalType.FundamentalType) extends OutgoingMessage with Cancellable {
 
     import ReqFundamentalData._
-    
+
     def rawId = reqId.raw
     def cancelMessage = CancelFundamentalData(reqId)
-    
+
     def write(implicit out: OutputStream, serverVersion: Int): Unit = {
       import contract._
       if (serverVersion < MinServerVer.TradingClass && conId.id > 0) {
