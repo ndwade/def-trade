@@ -15,26 +15,29 @@
  */
 package io.deftrade.db
 
-import slick.backend.DatabasePublisher
 import java.time.OffsetDateTime
+
+import scala.concurrent.{ Await, ExecutionContext, Future }
+import scala.concurrent.duration.{ Duration, DurationInt }
 import scala.language.postfixOps
-import scala.concurrent.{ Future, ExecutionContext }
 
-import scala.concurrent.{ Await, duration }
-import duration._
-import org.scalatest._
-
-import io.deftrade.test.Tables._
+import org.scalatest.{ BeforeAndAfterEach, FlatSpec, Matchers }
 
 import com.github.tminglei.slickpg.{ JsonString, Range => PgRange }
+
+import slick.backend.DatabasePublisher
+
+import test.Tables.{ Span, User, UserPasAggRec, Users }
+
 object Misc {
   def now = OffsetDateTime.now()
   val yearStart = OffsetDateTime.parse("2016-01-01T00:00:00+00:00")
-  val ytd: Span = PgRange(yearStart, yearStart).copy(end = None)  // WAT
+  val ytd: Span = PgRange(yearStart, yearStart).copy(end = None) // WAT
   def fromNow: Span = PgRange(now, now).copy(end = None)
 }
 trait PgSpec extends FlatSpec with Matchers with BeforeAndAfterEach {
 
+  import test.Tables.profile
   import profile.api._
   lazy val db = Database.forConfig("postgres")
 
@@ -76,22 +79,27 @@ class RepoSpec extends PgSpec {
   import Misc._
   import ExecutionContext.Implicits.global
 
-  val user0 = User(span = ytd, userName = "Binky", signup = yearStart, btcAddr = "1337", meta = JsonString("{}"))
-  
+  val user0 = User(
+    userName = "Binky",
+    signup = yearStart,
+    btcAddr = "1GaAWoGCMTnmXH4o8ciNTedshgsdwX2Get")
+
   behavior of "the base repo"
 
   it should "insert a record" in {
     val nrows = exec {
-//      Users.insert(user0)
+      //      Users.insert(user0)
       user0.insert()
     }
-    nrows.userName should be (user0.userName)
+    nrows.userName shouldEqual user0.userName
+    assert(nrows.btcAddr === user0.btcAddr)
+//    assert(nrows.signup === user0.signup) // offset screwing up
   }
-  
+
   it should "delete a record" in {
     val nrows = exec {
       Users.delete()
     }
-    nrows should be (1)
+    nrows shouldEqual 1
   }
 }

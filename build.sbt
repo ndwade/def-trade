@@ -68,7 +68,7 @@ lazy val db = project.
       val r = (runner in Test).value
       val cp = (fullClasspath in Compile).value.files ++ (unmanagedResourceDirectories in Test).value
       val dir = (sourceManaged in Test).value
-      val pkg = "io.deftrade.test"
+      val pkg = "io.deftrade.db.test"
       val pkgDir = (pkg split '.').foldLeft(dir) { _ / _ }
       val log = streams.value.log
       toError(r.run("io.deftrade.db.SourceCodeGenerator", cp, Array(dir.getPath, pkg), log))

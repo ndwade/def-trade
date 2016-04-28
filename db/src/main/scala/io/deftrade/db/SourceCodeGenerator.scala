@@ -94,7 +94,8 @@ object SourceCodeGenerator {
 
 import slick.codegen.{ AbstractSourceCodeGenerator, OutputHelpers }
 /**
-  *
+  * Generates Slick model source from the Postgres database model. This generator is specific to the
+  * def-trade project.
   */
 class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel: slick.model.Model)
     extends AbstractSourceCodeGenerator(schemaModel) with OutputHelpers { scg =>
@@ -259,10 +260,10 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     override def Column = column => new Column(column) { columnDef =>
 
       /**
-        * @returns the full scala type mapped from the SQL type given in the model.
+        * Returns the full scala type mapped from the SQL type given in the model.
         * Note that this method will basically make an array out of any type; if this is
         * not supported it should not compile (fail to find implicits) when the whole model
-        * is assembled. So we take the easy path here; wire walk with a net ;)
+        * is assembled.
         */
       override def rawType: String = column match {
         case col if pkId contains col           => idType(col)
@@ -271,10 +272,10 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
           case SqlType(pgType) => toScala(pgType)
         } getOrElse { throw new IllegalStateException(s"SqlType not found for $col") }
       }
-      // All pg => scala type mapping happens here.
-      val RxArray = """_(.*)""".r // postgres naming convention
-      val RxEnum = """(.*_e)""".r // project specific naming convention
-      def toScala(pgType: String): String = pgType match {
+
+      private val RxArray = """_(.*)""".r // postgres naming convention
+      private val RxEnum = """(.*_e)""".r // project specific naming convention
+      private def toScala(pgType: String): String = pgType match {
         case RxArray(tn)   => s"List[${toScala(tn)}]"
         case RxEnum(en)    => s"${en.toCamelCase}.${en.toCamelCase}"
         case "date"        => "java.time.LocalDate"
@@ -286,6 +287,15 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         case "tstzrange"   => "PgRange[java.time.OffsetDateTime]"
         case "jsonb"       => "JsonString"
         case _             => column.tpe
+      }
+      /**
+        * Project specific default values based on naming conventions. Ugly, but preferable to
+        * overriding slick model generator code.
+        */
+      override def default: Option[String] = (name, actualType) match {
+        case ("span", "PgRange[java.time.OffsetDateTime]") => Some("Span.empty")
+        case ("meta", "JsonString") => Some("""JsonString("{}")""")
+        case _ => super.default
       }
     }
 

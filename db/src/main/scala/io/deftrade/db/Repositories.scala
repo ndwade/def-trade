@@ -21,7 +21,7 @@ import scala.language.postfixOps
 
 final case class Id[T, V <: AnyVal](val value: V) extends AnyVal with slick.lifted.MappedTo[V]
 object Id {
-  implicit def ordering[V <: AnyVal: Ordering] = Ordering.by[Id[_, V], V]((id: Id[_, V]) => id.value)
+  implicit def ordering[A, V <: AnyVal: Ordering] = Ordering.by[Id[A, V], V]((id: Id[A, V]) => id.value)
 }
 
 /**
@@ -31,7 +31,7 @@ object Id {
  * The [[Repository]] instance for each table is constructed by the `SourceCodeGenerator`,
  * including type member and value member definitions.
  *
- * OK NEW PLAN
+ * === Usage within [[SourceCodeGenerator]] ===
  * - Repository is created for every table, even those without a primary key
  * - RepoId trait stacked when table has primary key 'id' of type int4 or int8
  *   - also generate value classes for the id
@@ -41,7 +41,7 @@ object Id {
  * - if there is a RepoEid as above, and table has a column 'ts' of type timestamptz,
  *   then RepoPit trait is stacked to provide PointInTime methods.
  *
- * TODO:
+ * === TODO: ===
  * - optimistic locking
  * - `save(r: T)`: insert or update (upsert?)
  * - revisit using implicit for ColumnType instead of implicit param everywhere
@@ -134,8 +134,11 @@ trait Repositories {
   //  import java.sql.{ Timestamp => OffsetDateTime }
   import java.time.OffsetDateTime
   private def now() = OffsetDateTime.from(java.time.Instant.now())
-  import com.github.tminglei.slickpg.{ Range => PgRange }
+  import com.github.tminglei.slickpg.{ Range => PgRange, `[_,_)` }
   type Span = PgRange[OffsetDateTime]
+  object Span {
+    lazy val empty: Span = PgRange.apply(None, None, `[_,_)`) 
+  }
   trait EntityPit {
     def span: Span
   }

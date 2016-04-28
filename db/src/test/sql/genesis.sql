@@ -86,8 +86,8 @@ create table users (
   
   user_name varchar(126) unique not null, -- domain model must ensure uniqueness within domain
   signup timestamptz not null,            -- never changes for a given user name
-  btc_addr char(35) not null,             -- can change
-  meta jsonb not null,       -- can change
+  btc_addr varchar(35) not null,          -- can change
+  meta jsonb not null,                    -- can change
   
   span tstzrange not null
 );
