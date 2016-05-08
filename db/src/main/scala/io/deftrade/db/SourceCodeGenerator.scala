@@ -21,13 +21,9 @@ import duration._
 import ExecutionContext.Implicits.global
 import scala.language.postfixOps
 
-import com.typesafe.config.{ ConfigFactory, Config }
+import com.typesafe.config.ConfigFactory
 
-import slick.ast.{ ColumnOption => co }
 import slick.{ model => m }
-import slick.profile.SqlProfile.ColumnOption
-
-import com.github.tminglei.slickpg.{ Range => PgRange, JsonString }
 
 /**
   *  This customizes the Slick code generator. We only do simple name mappings.
@@ -70,7 +66,7 @@ object SourceCodeGenerator {
     val db = Database.forConfig("postgres", config)
 
     val enumAction = sql"""
-        SELECT t.typname, e.enumlabel 
+        SELECT t.typname, e.enumlabel
         FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid;"""
       .as[(String, String)]
 
@@ -102,6 +98,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   import slick.profile.SqlProfile.ColumnOption.SqlType
   import slick.ast.{ ColumnOption => co }
   import Depluralizer._
+
+   override val ddlEnabled = false
 
   /*
    * enum model
@@ -187,7 +185,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
      * point-in-time (Pit) class extensions
      */
     val pitSpan = table.columns find { col =>
-      col.name == "span" && // naming convention: pit range fields use this name exclusively 
+      col.name == "span" && // naming convention: pit range fields use this name exclusively
         col.options.contains(SqlType("tstzrange"))
     }
     for (_ <- pitSpan) {
@@ -197,7 +195,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       repositoryParents += "RepositoryPit"
     }
 
-    // compute the foreign key mapping to other tables for ID types 
+    // compute the foreign key mapping to other tables for ID types
     val idFkCol = (for {
       fk <- table.foreignKeys
       col <- fk.referencedColumns filter { c => isPk(c) && isId(c) }
@@ -226,7 +224,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         case parents =>
           val repoName = s"${tableName}Repository"
           val implicitPkColumnType = if (parents contains "RepositoryId")
-            s"override implicit lazy val idColumnType: ColumnType[${entityName}Id] = implicitly"
+            s"override implicit lazy val pkColumnType: ColumnType[${entityName}Id] = implicitly"
           else ""
           val spanScope = if (parents contains "RepositoryPit")
             s"""override lazy val spanScope = SpanScope[$entityName](
@@ -239,7 +237,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
             val tpe = colDef.actualType
             s"""
             |  /** generated for index on $name */
-            |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[T]] = findBy(_.$name, $name) 
+            |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[T]] = findBy(_.$name, $name)
             |""".stripMargin
           }
           s"""
@@ -301,6 +299,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     type PrimaryKey = PrimaryKeyDef
     def PrimaryKey = new PrimaryKey(_)
+
     type ForeignKey = ForeignKeyDef
     def ForeignKey = new ForeignKey(_) {
       // modified to use the `rows` method to access TableQuery
@@ -332,7 +331,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     |import io.deftrade.db._
     |
     | // AUTO-GENERATED Enumerations with Slick data model conversions
-    | 
+    |
     |$enumCode
     |
     |// AUTO-GENERATED Slick data model
@@ -346,13 +345,13 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     |trait ${container}${parentType.map(t => s" extends $t").getOrElse("")} {
     |  val profile: $profile  // must retain this driver
     |  import profile.api._
-    | 
-    |  // AUTO-GENERATED type-safe primary key value classes
-    |  
+    |
+    |  // AUTO-GENERATED type-safe Int and Long primary key value classes
+    |
     |  ${indent(pkIdDefsCode.result.mkString)}
     |
     |  // AUTO-GENERATED tables code
-    |  
+    |
     |  ${indent(tablesCode)}
     |
     |}

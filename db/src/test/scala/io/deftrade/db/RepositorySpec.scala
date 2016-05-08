@@ -35,13 +35,17 @@ object Misc {
   val ytd: Span = PgRange(yearStart, yearStart).copy(end = None) // WAT
   def fromNow: Span = PgRange(now, now).copy(end = None)
 }
-trait PgSpec extends FlatSpec with Matchers with BeforeAndAfterEach {
+import org.scalactic._
+trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with BeforeAndAfterEach {
 
   import test.Tables.profile
   import profile.api._
   lazy val db = Database.forConfig("postgres")
 
   implicit val globalTimeout = 2 seconds
+  implicit val offsetDateTimeEquivalence = new org.scalactic.Equivalence[OffsetDateTime] {
+    override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
+  }
 
   def exec[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: Duration): T = {
     Await.result(db.run(action), timeout)
@@ -88,18 +92,20 @@ class RepoSpec extends PgSpec {
 
   it should "insert a record" in {
     val nrows = exec {
-      //      Users.insert(user0)
-      user0.insert()
+      user0.insert() // Users.insert(user0)
     }
-    nrows.userName shouldEqual user0.userName
-    assert(nrows.btcAddr === user0.btcAddr)
-//    assert(nrows.signup === user0.signup) // offset screwing up
+    nrows.userName should === (user0.userName)
+    nrows.btcAddr should === (user0.btcAddr)
+    nrows.signup should === (user0.signup)
   }
 
-  it should "delete a record" in {
-    val nrows = exec {
+  it should "delete all records" in {
+    val nrows = exec { Users.size }
+    val ngone = exec {
       Users.delete()
     }
-    nrows shouldEqual 1
+    ngone should === (nrows)
   }
+
 }
+

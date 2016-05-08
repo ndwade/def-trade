@@ -15,11 +15,12 @@
  */
 package io.deftrade.db
 
-object xmlToJson {
+import scala.language.postfixOps
+import scala.xml.{ Elem, MetaData, Node, NodeSeq, Text, Utility }
 
-  import scala.language.postfixOps
-  import scala.xml._
-  import upickle.{ Js, json }
+import upickle.{ Js, json }
+
+object xmlToJson extends ((NodeSeq, NodeSeq) => String) {
 
   def apply(nodes: NodeSeq, excludes: NodeSeq = NodeSeq.Empty): String = {
 
@@ -31,7 +32,7 @@ object xmlToJson {
 
       val taggedJsVals = for {
         node <- nodes if !(excludes contains node)
-        trimmedNode <- Utility trimProper node
+        trimmedNode <- Utility trimProper node // FIXME: what's trimmedNode doing here?!
       } yield node.label -> nodeToJs(node)
 
       taggedJsVals groupBy { case (tag, _) => tag } mapValues {

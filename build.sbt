@@ -10,6 +10,10 @@ lazy val gitHeadCommitSha = taskKey[String](
 
 gitHeadCommitSha := Process("git rev-parse HEAD").lines.head
 
+// http://stackoverflow.com/questions/20083564/can-multi-projects-from-git-be-used-as-sbt-dependencies
+// lazy val staminaCore = ProjectRef(uri("git://github.com/scalapenos/stamina.git#master"), "stamina-core")
+
+
 val genSlickCode = taskKey[Seq[File]]("Generate Slick types and repos from Postgres schema.")
 
 lazy val buildSettings = buildLicenseSettings ++ Seq(
