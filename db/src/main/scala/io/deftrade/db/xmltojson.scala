@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.deftrade.db
 
 import scala.language.postfixOps
@@ -20,8 +21,17 @@ import scala.xml.{ Elem, MetaData, Node, NodeSeq, Text, Utility }
 
 import upickle.{ Js, json }
 
-object xmlToJson extends ((NodeSeq, NodeSeq) => String) {
+object XmlToJson extends ((NodeSeq, NodeSeq) => String) {
 
+  /**
+   * Conversts a forest of XML nodes to a JSON array.
+   *
+   * @param nodes the XML `Nodes` to convert.
+   * @param excludes Limits the depth of the object nesting in the generated forest of JSON objects.
+   * If during recusive conversion an XML [[Node]] in the `excludes` set is encountered, conversion
+   * stops.
+   * @return a `String` representing a JSON array.
+   */
   def apply(nodes: NodeSeq, excludes: NodeSeq = NodeSeq.Empty): String = {
 
     def attrsToTaggedJsVals(attrs: MetaData): List[(String, Js.Str)] = attrs.asAttrMap.toList map {

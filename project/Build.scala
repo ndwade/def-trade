@@ -8,7 +8,7 @@ object Version {
   val ScalaTest = "2.2.6"
   val Scalactic = "2.2.6"
   val Slick = "3.1.1"
-  val SlickPg = "0.12.2"
+  val SlickPg = "0.14.0"
   val PgJdbc = "9.4-1201-jdbc41"
   val UPickle = "0.3.6"
 }

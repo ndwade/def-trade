@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.deftrade.db
 
 //import scala.util.{ Success, Failure }
@@ -20,15 +21,16 @@ import scala.concurrent.{ ExecutionContext, Await, duration }
 import duration._
 import ExecutionContext.Implicits.global
 import scala.language.postfixOps
+import scala.collection.JavaConversions.asScalaBuffer
 
 import com.typesafe.config.ConfigFactory
 
 import slick.{ model => m }
 
 /**
-  *  This customizes the Slick code generator. We only do simple name mappings.
-  *  For a more advanced example see https://github.com/cvogt/slick-presentation/tree/scala-exchange-2013
-  */
+ *  This customizes the Slick code generator. We only do simple name mappings.
+ *  For a more advanced example see https://github.com/cvogt/slick-presentation/tree/scala-exchange-2013
+ */
 object SourceCodeGenerator {
   import DefTradePgDriver.{ createModel, defaultTables, api }
   import api._
@@ -43,8 +45,6 @@ object SourceCodeGenerator {
 
     val folder = args(0)
     val pkg = args(1)
-
-    import scala.collection.JavaConversions.asScalaBuffer
 
     val config = ConfigFactory.load()
 
@@ -82,7 +82,8 @@ object SourceCodeGenerator {
         folder = folder,
         pkg = pkg,
         container = "Tables",
-        fileName = "Tables.scala")
+        fileName = "Tables.scala"
+      )
     }, { throw _ })
     Await.result(future, 5 seconds)
   }
@@ -90,16 +91,16 @@ object SourceCodeGenerator {
 
 import slick.codegen.{ AbstractSourceCodeGenerator, OutputHelpers }
 /**
-  * Generates Slick model source from the Postgres database model. This generator is specific to the
-  * def-trade project.
-  */
+ * Generates Slick model source from the Postgres database model. This generator is specific to the
+ * def-trade project.
+ */
 class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel: slick.model.Model)
     extends AbstractSourceCodeGenerator(schemaModel) with OutputHelpers { scg =>
   import slick.profile.SqlProfile.ColumnOption.SqlType
   import slick.ast.{ ColumnOption => co }
   import Depluralizer._
 
-   override val ddlEnabled = false
+  override val ddlEnabled = false
 
   /*
    * enum model
@@ -114,9 +115,9 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   } mkString
 
   /**
-    * Derive the scala name for a row case class by depluralizing (things => thing) and
-    * converting the db names (lower_case) to scala names (camelCase).
-    */
+   * Derive the scala name for a row case class by depluralizing (things => thing) and
+   * converting the db names (lower_case) to scala names (camelCase).
+   */
   override def entityName = (dbName: String) => dbName.depluralize.toCamelCase
 
   def idType(col: m.Column): String = s"${entityName(col.table.table)}Id"
@@ -129,15 +130,15 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   // keep same conventions as slick codegen, even though I hate them.
   type Table = TableDef
   /**
-    * Generates source for a SQL table.
-    * @param table The [[slick.model.Table]] model
-    *
-    * Rules for Repositories
-    * - if table has a primary key, it gets a [[Repository]] instance
-    * - if it has a primary key named `id`, it gets a [[RepositoryId]] instance
-    * - if it has statusTs/endTs column pair, it gets a [[RepositoryPit]] instance
-    * - if no primary key but two foreign keys, it's a junction table
-    */
+   * Generates source for a SQL table.
+   * @param table The [[slick.model.Table]] model
+   *
+   * Rules for Repositories
+   * - if table has a primary key, it gets a [[Repository]] instance
+   * - if it has a primary key named `id`, it gets a [[RepositoryId]] instance
+   * - if it has statusTs/endTs column pair, it gets a [[RepositoryPit]] instance
+   * - if no primary key but two foreign keys, it's a junction table
+   */
   override def Table = table => new TableDef(table) { tableDef =>
 
     import slick.{ model => m }
@@ -224,7 +225,9 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         case parents =>
           val repoName = s"${tableName}Repository"
           val implicitPkColumnType = if (parents contains "RepositoryId")
-            s"override implicit lazy val pkColumnType: ColumnType[${entityName}Id] = implicitly"
+            // s"override implicit lazy val pkColumnType: ColumnType[${entityName}Id] = implicitly"
+            // s"override implicit def pkColumnType: ColumnType[${entityName}Id] = implicitly"
+            ""
           else ""
           val spanScope = if (parents contains "RepositoryPit")
             s"""override lazy val spanScope = SpanScope[$entityName](
@@ -258,11 +261,11 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     override def Column = column => new Column(column) { columnDef =>
 
       /**
-        * Returns the full scala type mapped from the SQL type given in the model.
-        * Note that this method will basically make an array out of any type; if this is
-        * not supported it should not compile (fail to find implicits) when the whole model
-        * is assembled.
-        */
+       * Returns the full scala type mapped from the SQL type given in the model.
+       * Note that this method will basically make an array out of any type; if this is
+       * not supported it should not compile (fail to find implicits) when the whole model
+       * is assembled.
+       */
       override def rawType: String = column match {
         case col if pkId contains col           => idType(col)
         case col if idFkCol.keySet contains col => idType(idFkCol(col))
@@ -276,20 +279,20 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       private def toScala(pgType: String): String = pgType match {
         case RxArray(tn)   => s"List[${toScala(tn)}]"
         case RxEnum(en)    => s"${en.toCamelCase}.${en.toCamelCase}"
-        case "date"        => "java.time.LocalDate"
-        case "time"        => "java.time.LocalTime"
-        case "timestamp"   => "java.time.LocalDateTime"
+        // case "date"        => "java.time.LocalDate"
+        // case "time"        => "java.time.LocalTime"
+        // case "timestamp"   => "java.time.LocalDateTime"
         case "timestamptz" => "java.time.OffsetDateTime"
-        case "interval"    => "java.time.Duration"
-        case "tsrange"     => "PgRange[java.time.LocalDateTime]"
+        // case "interval"    => "java.time.Duration"
+        // case "tsrange"   => "PgRange[java.time.LocalDateTime]"
         case "tstzrange"   => "PgRange[java.time.OffsetDateTime]"
         case "jsonb"       => "JsonString"
         case _             => column.tpe
       }
       /**
-        * Project specific default values based on naming conventions. Ugly, but preferable to
-        * overriding slick model generator code.
-        */
+       * Project specific default values based on naming conventions. Ugly, but preferable to
+       * overriding slick model generator code.
+       */
       override def default: Option[String] = (name, actualType) match {
         case ("span", "PgRange[java.time.OffsetDateTime]") => Some("Span.empty")
         case ("meta", "JsonString") => Some("""JsonString("{}")""")
@@ -360,8 +363,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 }
 
 /**
-  * Interprets a name as a plural noun and returns the singular version. Hacked ad hoc as needed.
-  */
+ * Interprets a name as a plural noun and returns the singular version. Hacked ad hoc as needed.
+ */
 private[db] object Depluralizer {
 
   private val RxRow = "(.*)(?i:sheep|series|as|is|us)".r
@@ -380,7 +383,8 @@ private[db] object Depluralizer {
       case RxEn(t)       => t // oxen => ox
       case RxS(t)        => t // cars => car
       case _ => throw new IllegalArgumentException(
-        s"sorry - we seem to need a new depluralize() rule for $s")
+        s"sorry - we seem to need a new depluralize() rule for $s"
+      )
     }
   }
 }

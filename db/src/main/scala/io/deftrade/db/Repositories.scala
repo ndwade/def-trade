@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.deftrade.db
 
 import java.time.OffsetDateTime
@@ -21,6 +22,9 @@ import scala.language.postfixOps
 import java.time.OffsetDateTime
 import com.github.tminglei.slickpg.{ Range => PgRange, `[_,_)` }
 
+/*
+* Type safe primary key classes for Int and Long
+*/
 final case class Id[T, V <: AnyVal](val value: V) extends AnyVal with slick.lifted.MappedTo[V]
 object Id {
   implicit def ordering[A, V <: AnyVal: Ordering] = Ordering.by[Id[A, V], V]((id: Id[A, V]) => id.value)
@@ -87,7 +91,7 @@ trait Repositories {
     type PK = Id[T, V]
     def id: Option[PK]
   }
-  
+
   trait EntityId[T_, V_ <: AnyVal] extends EntityIdLike { type T = T_; type V = V_ }
 
   trait TableId[T <: EntityIdLike] extends TablePk[T] { self: Table[T] =>
@@ -132,20 +136,21 @@ trait Repositories {
     type E <: Table[T] with TablePk[T]
     type PK = T#PK
 
-    implicit def pkColumnType: ColumnType[PK]
+    // implicit def pkColumnType: ColumnType[PK]
 
     protected val getPk: Get[PK] = e => e._pk
 
-    def findQuery(pk: PK): Query[E, T, Seq] = findByQuery(getPk, pk)
-    def find(pk: PK): DBIO[T] = findBy(getPk, pk).head
-    def maybeFind(pk: PK): DBIO[Option[T]] = findBy(_._pk, pk).headOption
+    def findQuery(pk: PK)(implicit ev: ColumnType[PK]): Query[E, T, Seq] = findByQuery(getPk, pk)
+    def find(pk: PK)(implicit ev: ColumnType[PK]): DBIO[T] = findBy(getPk, pk).head
+    def maybeFind(pk: PK)(implicit ev: ColumnType[PK]): DBIO[Option[T]] = findBy(_._pk, pk).headOption
 
-    final def insertReturnId(t: T): DBIO[PK] = rows returning (rows map (_._pk)) += t
+    final def insertReturnId(t: T)(implicit ev: ColumnType[PK]): DBIO[PK] = rows returning (rows map (_._pk)) += t
   }
 
   trait RepositoryId extends RepositoryPk {
     type T <: EntityIdLike
     type E <: Table[T] with TableId[T]
+    override type PK = T#PK
 
     override protected val getPk: Get[PK] = e => e.id
 
@@ -156,7 +161,9 @@ trait Repositories {
      * Relies on the fact that the `id` index is always increasing.
      */
     final def findCurrentBy[A](getA: E => Rep[A], a: A)(
-      implicit evA: ColumnType[A]): DBIO[Option[T]] = {
+      implicit
+      evA: ColumnType[A], evPK: ColumnType[PK]
+    ): DBIO[Option[T]] = {
 
       val aRows = for {
         row <- rows filter { getA(_) === a }
@@ -194,7 +201,7 @@ trait Repositories {
 
     def spanScope: SpanScope[T]
 
-    // FIXME: compile this. Also - is there a way to make this a view?
+    // TODO: compile this. Also - is there a way to make this a view?
     @inline def asOfNowQuery: QueryType = asOfQuery(now)
     def asOfNow: DBIO[Seq[T]] = asOfNowQuery.result
 
@@ -202,13 +209,13 @@ trait Repositories {
 
     def asOf(ts: OffsetDateTime): DBIO[Seq[T]] = asOfQuery(ts).result
 
-    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T): DBIO[PK] = {
+    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T)(implicit ev: ColumnType[PK]): DBIO[PK] = {
 
       import scala.concurrent.ExecutionContext.Implicits.global
 
       def update(t: T) = t.span match {
         case PgRange(Some(_), None, _) => findQuery(id) update (spanScope.conclude(ts, t))
-        case range => DBIO.failed(new IllegalStateException(s"""already expired: $range"""))
+        case range                     => DBIO.failed(new IllegalStateException(s"""already expired: $range"""))
       }
 
       val insertAction = for {

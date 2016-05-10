@@ -2,21 +2,35 @@ import Dependencies._
 import Resolvers._
 import Defs._
 
+import scalariform.formatter.preferences._
+import com.typesafe.sbt.SbtScalariform
+import com.typesafe.sbt.SbtScalariform.ScalariformKeys
+
+import de.heikoseeberger.sbtheader
+import sbtheader.AutomateHeaderPlugin
+import sbtheader.license.Apache2_0
+
+
+SbtScalariform.scalariformSettings
+
+
+
 crossPaths in Global := false
 
-lazy val gitHeadCommitSha = taskKey[String](
-  "Determines the current git commit SHA"
-)
-
-gitHeadCommitSha := Process("git rev-parse HEAD").lines.head
+// lazy val gitHeadCommitSha = taskKey[String](
+//   "Determines the current git commit SHA"
+// )
+//
+// gitHeadCommitSha := Process("git rev-parse HEAD").lines.head
 
 // http://stackoverflow.com/questions/20083564/can-multi-projects-from-git-be-used-as-sbt-dependencies
 // lazy val staminaCore = ProjectRef(uri("git://github.com/scalapenos/stamina.git#master"), "stamina-core")
 
 
+
 val genSlickCode = taskKey[Seq[File]]("Generate Slick types and repos from Postgres schema.")
 
-lazy val buildSettings = buildLicenseSettings ++ Seq(
+lazy val buildSettings = Seq(
     organization := "io.deftrade",
     version := "0.1-SNAPSHOT",
     scalaVersion := Version.Scala,
@@ -24,23 +38,28 @@ lazy val buildSettings = buildLicenseSettings ++ Seq(
 
     // TODO: check - parallelExecution in Test := false // will this work?
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-    resolvers ++= Seq(typesafeReleases, pathikrit)
+    resolvers ++= Seq(typesafeReleases, pathikrit),
+    headers := Map(
+      "scala" -> Apache2_0("2014-2016", "Panavista Technologies LLC"),
+      "conf"  -> Apache2_0("2014-2016", "Panavista Technologies LLC", "#")
+    )
   )
 
-lazy val buildLicenseSettings = {
-  import com.banno.license.Plugin.LicenseKeys._
-  import com.banno.license.Licenses._
-  licenseSettings ++ Seq(
-    license := apache2("Copyright 2014-2016 Panavista Technologies, LLC"),
-    removeExistingHeaderBlock := true,
-    licenseTests := true
-  )
-}
+
+// lazy val buildLicenseSettings = {
+//   import com.banno.license.Plugin.LicenseKeys._
+//   import com.banno.license.Licenses._
+//   licenseSettings ++ Seq(
+//     license := apache2("Copyright 2014-2016 Panavista Technologies, LLC"),
+//     removeExistingHeaderBlock := true,
+//     licenseTests := true
+//   )
+// }
 
 lazy val deftrade = (project in file (".")).
   aggregate(macros, ibClient, demo).
-  settings(buildSettings: _*).
-  settings(buildLicenseSettings: _*)
+  enablePlugins(AutomateHeaderPlugin).
+  settings(buildSettings: _*)
 
 lazy val macros = (project in file ("macros")).
   settings(buildSettings: _*).
@@ -50,7 +69,7 @@ lazy val macros = (project in file ("macros")).
       Seq(scalatest).map(_ % Test)
   )
 
-lazy val ibClient = (project in file ("ib-client")).
+lazy val ibClient = project.
   dependsOn(macros).
   settings(buildSettings: _*).
   settings(
@@ -61,7 +80,14 @@ lazy val ibClient = (project in file ("ib-client")).
   )
 
 lazy val db = project.
+enablePlugins(AutomateHeaderPlugin).
   settings(buildSettings: _*).
+  settings(ScalariformKeys.preferences := ScalariformKeys.preferences.value
+    .setPreference(AlignSingleLineCaseStatements, true)
+    .setPreference(AlignSingleLineCaseStatements.MaxArrowIndent, 40)
+    .setPreference(DoubleIndentClassDeclaration, true)
+    .setPreference(PreserveDanglingCloseParenthesis, true)
+    .setPreference(SpacesWithinPatternBinders, true)).
   settings(
     libraryDependencies ++=
       Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres,
@@ -99,6 +125,30 @@ lazy val demo = (project in file ("demo")).
       Seq(xml, akka, testkit, akkaStream, slf4j, logback) ++
       Seq(scalatest, akkaStreamTestkit).map(_ % Test)
   )
+
+
+
+// #Scalariform formatter preferences
+// #Fri Apr 01 21:09:37 BST 2011
+// alignParameters=true
+// compactStringConcatenation=false
+// indentPackageBlocks=true
+// formatXml=true
+// preserveSpaceBeforeArguments=false
+// doubleIndentClassDeclaration=false
+// doubleIndentMethodDeclaration=false
+// rewriteArrowSymbols=false
+// alignSingleLineCaseStatements=true
+// alignSingleLineCaseStatements.maxArrowIndent=40
+// spaceBeforeColon=false
+// spaceInsideBrackets=false
+// spaceInsideParentheses=false
+// preserveDanglingCloseParenthesis=false
+// indentSpaces=2
+// indentLocalDefs=false
+// spacesWithinPatternBinders=true
+// spacesAroundMultiImports=true
+
 //pg_dump --dbname=test --username=deftrade --no-password --schema-only --clean --file=genesis.sql
   /**
   * === SBT Task Breakdown ===

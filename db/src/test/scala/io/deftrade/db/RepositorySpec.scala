@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Panavista Technologies, LLC
+ * Copyright 2014-2016 Panavista Technologies LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.deftrade.db
 
 import java.time.OffsetDateTime
@@ -23,7 +24,7 @@ import scala.language.postfixOps
 
 import org.scalatest.{ BeforeAndAfterEach, FlatSpec, Matchers }
 
-import com.github.tminglei.slickpg.{ JsonString, Range => PgRange }
+import com.github.tminglei.slickpg.{ Range => PgRange }
 
 import slick.backend.DatabasePublisher
 
@@ -55,10 +56,10 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
   }
 
   /**
-    * Execute the `action` transactionally and return the value, but roll back the transaction.
-    * - if `action` succeeds, return the result and rollback
-    * - if `action` fails, throw the exception
-    */
+   * Execute the `action` transactionally and return the value, but roll back the transaction.
+   * - if `action` succeeds, return the result and rollback
+   * - if `action` fails, throw the exception
+   */
   def execAndRollback[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: Duration): T = {
 
     case class ResultEscapePod(t: T) extends Throwable
@@ -82,30 +83,41 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
 class RepoSpec extends PgSpec {
   import Misc._
   import ExecutionContext.Implicits.global
+  import test.Tables.profile
+  import profile.api._
 
   val user0 = User(
     userName = "Binky",
     signup = yearStart,
-    btcAddr = "1GaAWoGCMTnmXH4o8ciNTedshgsdwX2Get")
+    btcAddr = "1GaAWoGCMTnmXH4o8ciNTedshgsdwX2Get"
+  )
 
   behavior of "the base repo"
 
   it should "insert a record" in {
-    val nrows = exec {
+    val user1 = exec {
       user0.insert() // Users.insert(user0)
     }
-    nrows.userName should === (user0.userName)
-    nrows.btcAddr should === (user0.btcAddr)
-    nrows.signup should === (user0.signup)
+    user1.userName should ===(user0.userName)
+    user1.btcAddr should ===(user0.btcAddr)
+    user1.signup should ===(user0.signup)
+    user1.id should ===(Some(Id[User, Long](1L)))
+  }
+
+  it should "find an existing record by id" in {
+    val user1 = exec { Users.find(Id[User, Long](1L)) }
+    user1.userName should ===(user0.userName)
+    user1.btcAddr should ===(user0.btcAddr)
+    user1.signup should ===(user0.signup)
+    user1.id should ===(Some(Id[User, Long](1L)))
   }
 
   it should "delete all records" in {
-    val nrows = exec { Users.size }
+    val nsize = exec { Users.size }
     val ngone = exec {
       Users.delete()
     }
-    ngone should === (nrows)
+    ngone should ===(nsize)
   }
 
 }
-
