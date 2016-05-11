@@ -36,17 +36,15 @@ object Misc {
   val ytd: Span = PgRange(yearStart, yearStart).copy(end = None) // WAT
   def fromNow: Span = PgRange(now, now).copy(end = None)
 }
+
 import org.scalactic._
 trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with BeforeAndAfterEach {
-
   import test.Tables.profile
   import profile.api._
+
   lazy val db = Database.forConfig("postgres")
 
   implicit val globalTimeout = 2 seconds
-  implicit val offsetDateTimeEquivalence = new org.scalactic.Equivalence[OffsetDateTime] {
-    override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
-  }
 
   def exec[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: Duration): T = {
     Await.result(db.run(action), timeout)
@@ -85,6 +83,14 @@ class RepoSpec extends PgSpec {
   import ExecutionContext.Implicits.global
   import test.Tables.profile
   import profile.api._
+  import TupleEquvalenceImplicits._
+  implicit val offsetDateTimeEquivalence = new Equivalence[OffsetDateTime] {
+    override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
+  }
+  implicit def optionEquivalence[A](implicit ev: Equivalence[A]) = new Equivalence[Option[A]] {
+    override def areEquivalent(a: Option[A], b: Option[A]) =
+      (for { _a <- a; _b <- b } yield _a === _b).fold(false)(identity)
+  }
 
   val user0 = User(
     userName = "Binky",
@@ -106,9 +112,7 @@ class RepoSpec extends PgSpec {
 
   it should "find an existing record by id" in {
     val user1 = exec { Users.find(Id[User, Long](1L)) }
-    user1.userName should ===(user0.userName)
-    user1.btcAddr should ===(user0.btcAddr)
-    user1.signup should ===(user0.signup)
+    User.unapply(user1).get should ===(User.unapply(user0.copy(id = Some(Id[User, Long](1L)))).get)
     user1.id should ===(Some(Id[User, Long](1L)))
   }
 
@@ -120,4 +124,10 @@ class RepoSpec extends PgSpec {
     ngone should ===(nsize)
   }
 
+  "my stupid implicit tuple idea" should "work" in {
+    val odt0 = now
+    val odt1 = odt0.withOffsetSameInstant(java.time.ZoneOffset.UTC)
+    val s = "foo"
+    (s, odt0) should ===((s, odt1))
+  }
 }
