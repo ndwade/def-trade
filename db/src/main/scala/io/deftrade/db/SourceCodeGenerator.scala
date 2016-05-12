@@ -178,7 +178,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       tableParents += s"TableId[$T]"
       repositoryParents += "RepositoryId"
       pkIdDefsCode += s"""
-        |type ${idType(col)} = Id[$entityName, ${col.tpe}]
+        |type ${idType(col)} = Id[$T, $V]
+        |object ${idType(col)} extends IdCompanion[$T, $V]
         |""".stripMargin
     }
 

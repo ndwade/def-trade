@@ -17,6 +17,7 @@
 package io.deftrade.db
 
 import java.time.OffsetDateTime
+import java.time.ZoneOffset.UTC
 
 import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.concurrent.duration.{ Duration, DurationInt }
@@ -28,7 +29,7 @@ import org.scalatest.{ BeforeAndAfterEach, FlatSpec, Matchers }
 import slick.backend.DatabasePublisher
 import com.github.tminglei.slickpg.{ Range => PgRange }
 
-import test.Tables.{ Span, User, UserPasAggRec, Users }
+import test.Tables._
 
 object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTripleEquals {
 
@@ -111,21 +112,22 @@ class RepoSpec extends PgSpec {
     signup = yearStart,
     btcAddr = "1GaAWoGCMTnmXH4o8ciNTedshgsdwX2Get"
   )
-  val user1exp = user0.copy(id = Some(Id[User, Long](1L)))
+  val user1exp = user0.copy(id = Some(UserId(1)))
 
   behavior of "the base repo"
 
   it should "insert a record" in {
-    val user1 = exec {
-      user0.insert() // Users.insert(user0)
-    }
-    user1.id should ===(Some(Id[User, Long](1L)))
+    val Some(UserId(value)) = user1exp.id
+    value should ===(1L) // sanity check
+
+    val user1 = exec { user0.insert() }
+    user1.id should ===(Some(UserId(1)))
     user1 should ===(user1exp)
   }
 
   it should "find an existing record by id" in {
-    val user1 = exec { Users.find(Id[User, Long](1L)) }
-    user1.id should ===(Some(Id[User, Long](1L)))
+    val user1 = exec { Users find UserId(1) }
+    user1.id should ===(Some(UserId(1)))
     user1 should ===(user1exp)
   }
 
@@ -136,7 +138,7 @@ class RepoSpec extends PgSpec {
   }
   "my stupid implicit tuple idea" should "work" in {
     val odt0 = now
-    val odt1 = odt0.withOffsetSameInstant(java.time.ZoneOffset.UTC)
+    val odt1 = odt0.withOffsetSameInstant(UTC)
     val s = "foo"
     (s, odt0) should ===((s, odt1))
   }

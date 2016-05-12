@@ -29,6 +29,10 @@ final case class Id[T, V <: AnyVal](val value: V) extends AnyVal with slick.lift
 object Id {
   implicit def ordering[A, V <: AnyVal: Ordering] = Ordering.by[Id[A, V], V]((id: Id[A, V]) => id.value)
 }
+trait IdCompanion[T, V <: AnyVal] {
+  def apply(value: V) = Id.apply[T, V](value)
+  def unapply(id: Id[T, V]) = Id.unapply[T, V](id)
+}
 
 /**
  * Mixin for the `Tables` trait created by the [[SourceCodeGenerator]], adding various repository
