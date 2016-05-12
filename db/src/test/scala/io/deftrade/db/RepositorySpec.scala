@@ -22,13 +22,35 @@ import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.concurrent.duration.{ Duration, DurationInt }
 import scala.language.postfixOps
 
+import org.scalactic._
 import org.scalatest.{ BeforeAndAfterEach, FlatSpec, Matchers }
 
+import slick.backend.DatabasePublisher
 import com.github.tminglei.slickpg.{ Range => PgRange }
 
-import slick.backend.DatabasePublisher
-
 import test.Tables.{ Span, User, UserPasAggRec, Users }
+
+object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTripleEquals {
+
+  implicit val offsetDateTimeEquivalence = new Equivalence[OffsetDateTime] {
+    override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
+  }
+  implicit def optionEquivalence[A](implicit ev: Equivalence[A]) = new Equivalence[Option[A]] {
+    override def areEquivalent(a: Option[A], b: Option[A]) = (a, b) match {
+      case (Some(l), Some(r)) => l === r
+      case (None, None)       => true
+      case _                  => false
+    }
+  }
+  implicit def pgRangeEquivalence[A: Equivalence] = new Equivalence[PgRange[A]] {
+    override def areEquivalent(a: PgRange[A], b: PgRange[A]) =
+      PgRange.unapply(a) === PgRange.unapply(b)
+  }
+  implicit val userEquivalence = new Equivalence[User] {
+    override def areEquivalent(a: User, b: User) =
+      User.unapply(a) === User.unapply(b)
+  }
+}
 
 object Misc {
   def now = OffsetDateTime.now()
@@ -37,7 +59,6 @@ object Misc {
   def fromNow: Span = PgRange(now, now).copy(end = None)
 }
 
-import org.scalactic._
 trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with BeforeAndAfterEach {
   import test.Tables.profile
   import profile.api._
@@ -83,20 +104,14 @@ class RepoSpec extends PgSpec {
   import ExecutionContext.Implicits.global
   import test.Tables.profile
   import profile.api._
-  import TupleEquvalenceImplicits._
-  implicit val offsetDateTimeEquivalence = new Equivalence[OffsetDateTime] {
-    override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
-  }
-  implicit def optionEquivalence[A](implicit ev: Equivalence[A]) = new Equivalence[Option[A]] {
-    override def areEquivalent(a: Option[A], b: Option[A]) =
-      (for { _a <- a; _b <- b } yield _a === _b).fold(false)(identity)
-  }
+  import EquivalenceImplicits._
 
   val user0 = User(
     userName = "Binky",
     signup = yearStart,
     btcAddr = "1GaAWoGCMTnmXH4o8ciNTedshgsdwX2Get"
   )
+  val user1exp = user0.copy(id = Some(Id[User, Long](1L)))
 
   behavior of "the base repo"
 
@@ -104,26 +119,21 @@ class RepoSpec extends PgSpec {
     val user1 = exec {
       user0.insert() // Users.insert(user0)
     }
-    user1.userName should ===(user0.userName)
-    user1.btcAddr should ===(user0.btcAddr)
-    user1.signup should ===(user0.signup)
     user1.id should ===(Some(Id[User, Long](1L)))
+    user1 should ===(user1exp)
   }
 
   it should "find an existing record by id" in {
     val user1 = exec { Users.find(Id[User, Long](1L)) }
-    User.unapply(user1).get should ===(User.unapply(user0.copy(id = Some(Id[User, Long](1L)))).get)
     user1.id should ===(Some(Id[User, Long](1L)))
+    user1 should ===(user1exp)
   }
 
   it should "delete all records" in {
     val nsize = exec { Users.size }
-    val ngone = exec {
-      Users.delete()
-    }
+    val ngone = exec { Users.delete() }
     ngone should ===(nsize)
   }
-
   "my stupid implicit tuple idea" should "work" in {
     val odt0 = now
     val odt1 = odt0.withOffsetSameInstant(java.time.ZoneOffset.UTC)

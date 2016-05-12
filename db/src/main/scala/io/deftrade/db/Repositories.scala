@@ -20,7 +20,7 @@ import java.time.OffsetDateTime
 import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
 import java.time.OffsetDateTime
-import com.github.tminglei.slickpg.{ Range => PgRange, `[_,_)` }
+import com.github.tminglei.slickpg.{ Range => PgRange, `(_,_)` }
 
 /*
 * Type safe primary key classes for Int and Long
@@ -180,7 +180,7 @@ trait Repositories {
 
   type Span = PgRange[OffsetDateTime]
   object Span {
-    lazy val empty: Span = PgRange.apply(None, None, `[_,_)`)
+    lazy val empty: Span = PgRange.apply(None, None, `(_,_)`)
   }
   trait EntityPit extends EntityIdLike {
     def span: Span
