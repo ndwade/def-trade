@@ -29,7 +29,8 @@ case class BarAcc(
   var low: Double = PositiveInfinity,
   var close: Double = NaN,
   var volume: Int = 0,
-  var total: Double = 0.0)
+  var total: Double = 0.0
+)
 
 case class Bar(tsMillis: Long, open: Double, high: Double, low: Double, close: Double, volume: Int, wap: Double)
 
@@ -48,13 +49,13 @@ object RtVolume {
 
 object Flows {
   /**
-    * Processes a stream of raw ticks into candlesticks (bars).
-    * Written to work in the case where, for whatever reason, the RtVolume ticks are not reported
-    * strictly sequentially.
-    *
-    * @param barSize enum representing the time duration to aggregate within
-    * @return The `Flow` stream stage
-    */
+   * Processes a stream of raw ticks into candlesticks (bars).
+   * Written to work in the case where, for whatever reason, the RtVolume ticks are not reported
+   * strictly sequentially.
+   *
+   * @param barSize enum representing the time duration to aggregate within
+   * @return The `Flow` stream stage
+   */
   def tickToBar(barSize: BarSize.XVal): Flow[RawTickMessage, Bar, Unit] =
     Flow[RawTickMessage]
       .collect {
@@ -71,7 +72,7 @@ object Flows {
         acc
       }
       .mergeSubstreams // concatSubstreams will deadlock if ticks non-monotonic in time. 
-      .collect { 
+      .collect {
         case BarAcc(tsMillis, open, high, low, close, volume, total) if tsMillis < 0 => // sanity check
           Bar(tsMillis, open, high, low, close, volume, total / volume)
       }

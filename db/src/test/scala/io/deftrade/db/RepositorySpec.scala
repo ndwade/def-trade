@@ -107,10 +107,16 @@ class RepoSpec extends PgSpec {
   import profile.api._
   import EquivalenceImplicits._
 
+  "implicit tuple equivalence" should "work" in {
+    val odt0 = now
+    val odt1 = odt0.withOffsetSameInstant(UTC)
+    val s = "foo"
+    (s, odt0) should ===((s, odt1))
+  }
+
   val user0 = User(
     userName = "Binky",
-    signup = yearStart,
-    btcAddr = "1GaAWoGCMTnmXH4o8ciNTedshgsdwX2Get"
+    signup = yearStart
   )
   val user1exp = user0.copy(id = Some(UserId(1)))
 
@@ -135,11 +141,5 @@ class RepoSpec extends PgSpec {
     val nsize = exec { Users.size }
     val ngone = exec { Users.delete() }
     ngone should ===(nsize)
-  }
-  "my stupid implicit tuple idea" should "work" in {
-    val odt0 = now
-    val odt1 = odt0.withOffsetSameInstant(UTC)
-    val s = "foo"
-    (s, odt0) should ===((s, odt1))
   }
 }

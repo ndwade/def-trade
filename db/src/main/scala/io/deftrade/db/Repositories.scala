@@ -74,41 +74,6 @@ trait Repositories {
 
   def compiledComment[T](implicit ev: StreamingReadAction[T] <:< StreamingReadDBIO[T]) = ()
 
-  trait EntityPkLike {
-    type T
-    type PK
-  }
-
-  trait EntityPk[T_, PK_] extends EntityPkLike {
-    type T = T_
-    type PK = PK_
-  }
-
-  trait TablePk[T <: EntityPkLike] { self: Table[T] =>
-    type PK = T#PK
-    def _pk: Rep[PK]
-  }
-
-  trait EntityIdLike extends EntityPkLike {
-    type V <: AnyVal
-    type T
-    type PK = Id[T, V]
-    def id: Option[PK]
-  }
-
-  trait EntityId[T_, V_ <: AnyVal] extends EntityIdLike { type T = T_; type V = V_ }
-
-  trait TableId[T <: EntityIdLike] extends TablePk[T] { self: Table[T] =>
-    type V = T#V
-    def id: Rep[PK]
-    final def _pk = id
-  }
-
-  trait RepositorySchema { self: Repository =>
-    final def schema: SchemaDescription = rows.schema
-    final def create(): DBIO[Unit] = rows.schema.create
-    final def drop(): DBIO[Unit] = rows.schema.drop
-  }
   /**
    *  Base trait for all repositories. The abstract type members follow the naming convention used
    *  by Slick.
@@ -135,8 +100,26 @@ trait Repositories {
     }
   }
 
+  trait EntityPk {
+    type T
+    type PK
+    type EPK
+    def _pk: EPK
+  }
+
+  // trait EntityPk[T_, PK_] extends EntityPk {
+  //   type T = T_
+  //   type PK = PK_
+  //   type EPK = PK_
+  // }
+
+  trait TablePk[T <: EntityPk] { self: Table[T] =>
+    type PK = T#PK
+    def _pk: Rep[PK]
+  }
+
   trait RepositoryPk extends Repository {
-    type T <: EntityPkLike
+    type T <: EntityPk
     type E <: Table[T] with TablePk[T]
     type PK = T#PK
 
@@ -148,11 +131,28 @@ trait Repositories {
     def find(pk: PK)(implicit ev: ColumnType[PK]): DBIO[T] = findBy(getPk, pk).head
     def maybeFind(pk: PK)(implicit ev: ColumnType[PK]): DBIO[Option[T]] = findBy(_._pk, pk).headOption
 
-    final def insertReturnId(t: T)(implicit ev: ColumnType[PK]): DBIO[PK] = rows returning (rows map (_._pk)) += t
+    final def insertReturnPk(t: T)(implicit ev: ColumnType[PK]): DBIO[PK] = rows returning (rows map (_._pk)) += t
+  }
+
+  trait EntityId extends EntityPk {
+    type V <: AnyVal
+    type T
+    type PK = Id[T, V]
+    override type EPK = Option[PK]
+    def id: EPK
+    final def _pk = id
+  }
+
+  // trait EntityId[T_, V_ <: AnyVal] extends EntityId { type T = T_; type V = V_ }
+
+  trait TableId[T <: EntityId] extends TablePk[T] { self: Table[T] =>
+    type V = T#V
+    def id: Rep[PK]
+    final def _pk = id
   }
 
   trait RepositoryId extends RepositoryPk {
-    type T <: EntityIdLike
+    type T <: EntityId
     type E <: Table[T] with TableId[T]
     override type PK = T#PK
 
@@ -186,17 +186,17 @@ trait Repositories {
   object Span {
     lazy val empty: Span = PgRange.apply(None, None, `(_,_)`)
   }
-  trait EntityPit extends EntityIdLike {
+  trait EntityPit extends EntityPk {
     def span: Span
   }
   type SpanSetter[T <: EntityPit] = (OffsetDateTime, T) => T
   case class SpanScope[T <: EntityPit](init: SpanSetter[T], conclude: SpanSetter[T])
 
-  trait TablePit[T <: EntityPit] extends TableId[T] { self: Table[T] =>
+  trait TablePit[T <: EntityPit] extends TablePk[T] { self: Table[T] =>
     def span: Rep[Span]
   }
 
-  trait RepositoryPit extends RepositoryId {
+  trait RepositoryPit extends RepositoryPk {
 
     type T <: EntityPit
     type E <: Table[T] with TablePit[T]
@@ -225,7 +225,7 @@ trait Repositories {
       val insertAction = for {
         t <- find(id)
         n <- update(t) if n == 1
-        nid <- rows returning rows.map(_.id) += f(spanScope.init(ts, t))
+        nid <- rows returning rows.map(_._pk) += f(spanScope.init(ts, t))
       } yield nid
 
       insertAction.transactionally
@@ -235,7 +235,12 @@ trait Repositories {
   abstract class PassiveAggressiveRecord[R <: Repository](val repo: R) {
     def entity: repo.T
     final def insert(): DBIO[repo.T] = repo insert entity
-    final def delete(): DBIO[Int] = repo delete ()
+  }
+
+  trait RepositorySchema { self: Repository =>
+    final def schema: SchemaDescription = rows.schema
+    final def create(): DBIO[Unit] = rows.schema.create
+    final def drop(): DBIO[Unit] = rows.schema.drop
   }
 
 }

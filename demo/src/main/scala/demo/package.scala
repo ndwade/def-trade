@@ -49,7 +49,8 @@ package object demo {
 
   private val msgsDir = new File(
     System.getProperty("user.dir"),
-    config.getString("demo.msgs-dir"))
+    config.getString("demo.msgs-dir")
+  )
 
   if (!msgsDir.exists()) msgsDir.mkdir()
 
@@ -69,10 +70,12 @@ package object demo {
       classOf[ErrorMessage],
       classOf[SystemMessage],
       classOf[ReferenceDataMessage],
-      classOf[OrderManagementMessage]),
+      classOf[OrderManagementMessage]
+    ),
     fileMsgs(classOf[MarketDataMessage]),
     fileMsgs(classOf[AccountMessage]),
-    fileMsgs(classOf[HistoricalDataMessage])) reduce (_ & _)
+    fileMsgs(classOf[HistoricalDataMessage])
+  ) reduce (_ & _)
 
   def connect() = conn ! IbConnect(port = 7496, clientId = 0)
   def disconnect() = conn ! IbDisconnect("all done")

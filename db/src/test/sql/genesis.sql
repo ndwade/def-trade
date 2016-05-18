@@ -87,7 +87,6 @@ create table users (
 
   user_name varchar(126) not null,        -- domain model must ensure uniqueness within domain
   signup timestamptz not null,            -- never changes for a given user name
-  btc_addr varchar(35) not null,          -- can change
   meta jsonb not null,                    -- can change
 
   span tstzrange not null
@@ -96,13 +95,19 @@ create index users_user_name on users(user_name);
 create index users_span on users using gist(span);
 create index users_meta on users using gin (meta);
 
+drop table if exists root_orders cascade;
+create table root_orders (
+  uuid UUID primary key,
+  user_id int8 references users(id)
+);
+
 drop table if exists orders cascade;
 create table orders (
 
   id serial8 primary key,
 
-  uuid UUID not null,
-  user_id int4 references users(id) not null,
+  uuid UUID references root_orders,
+
   deliver_to jsonb not null,
   est_delivery interval not null,
   status order_status_e not null,
@@ -112,6 +117,19 @@ create table orders (
 create index orders_uuid on orders(uuid);
 create index orders_span on orders using gist(span);
 create index orders_deliver_to on orders(deliver_to);
+
+--
+-- all payments recorded here, including change (negative amount).
+-- a btc addr may be used only once per order
+--
+drop table if exists payments cascade;
+create table payments (
+  order_id int8 references orders(id) not null,
+  btc_addr varchar(35) not null,
+  amount money not null, -- negative means change returned to user
+  primary key (order_id, btc_addr)
+);
+
 --
 -- note - because prices are quoted in BTC, every order item will vary due to BTC volatility.
 -- (the real time pricing engine is proprietary to PIENET).
@@ -136,9 +154,9 @@ create table order_item_links (
 );
 
 
-insert into pizzas (name, toppings, span) values
-  ('cheese', '{"mozzarella"}', '[12/21/2012,)'),
-  ('pepperoni', '{"mozzarella", "pepperoni"}', '[12/21/2012,)'),
-  ('mushroom', '{"mozzarella", "mushrooms"}', '[12/21/2012,)'),
-  ('greek', '{"feta", "sausage", "olives", "onions", "peppers"}', '[12/21/2012,)'),
-  ('hawaiian', '{"mozzarella", "ham", "pineapple"}', '[12/21/2012,)');
+insert into pizzas (name, toppings, span, meta) values
+  ('cheese', '{"mozzarella"}', '[12/21/2012,)', '{}'),
+  ('pepperoni', '{"mozzarella", "pepperoni"}', '[12/21/2012,)','{}'),
+  ('mushroom', '{"mozzarella", "mushrooms"}', '[12/21/2012,)', '{}'),
+  ('greek', '{"feta", "sausage", "olives", "onions", "peppers"}', '[12/21/2012,)', '{}'),
+  ('hawaiian', '{"mozzarella", "ham", "pineapple"}', '[12/21/2012,)', '{}');

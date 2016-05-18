@@ -147,6 +147,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     val entityName = scg.entityName(table.name.table)
 
     val repositoryParents, tableParents, entityParents = List.newBuilder[String]
+    val entityRefinements, tableRefinements = List.newBuilder[String]
 
     // every Table gets a Repository
     repositoryParents += "Repository"
@@ -167,14 +168,30 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     val pk = table.columns find isPk
     val pkId = pk filter isId
+    val pkOther = pk filterNot isId
 
+    for (col <- pkOther) {
+      val T = entityName
+      val PK = col.tpe
+      val pk = col.name.toCamelCase.uncapitalize
+      entityParents += s"EntityPk"
+      entityRefinements ++= Seq(
+        s"type T = $T", s"type PK = $PK", s"type EPK = PK", s"override def _pk = $pk"
+      )
+      tableParents += s"TablePk[$T]"
+      tableRefinements += s"override def _pk = $pk"
+      repositoryParents += "RepositoryPk"
+    }
     /*
      * type safe primary key class extensions
      */
     for (col <- pkId) {
       val T = entityName
       val V = col.tpe
-      entityParents += s"EntityId[$T, $V]"
+      entityParents += s"EntityId"
+      entityRefinements ++= Seq(
+        s"type V = $V", s"type T = $T"
+      )
       tableParents += s"TableId[$T]"
       repositoryParents += "RepositoryId"
       pkIdDefsCode += s"""
@@ -209,6 +226,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     type EntityType = EntityTypeDef
     override def EntityType = new EntityType {
       override def parents: Seq[String] = entityParents.result
+      override def code: String = s"""${super.code} { ${entityRefinements.result mkString "; "}}"""
     }
 
     type PlainSqlMapper = PlainSqlMapperDef
@@ -217,6 +235,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     type TableClass = TableClassDef
     override def TableClass = new TableClass {
       override def parents: Seq[String] = tableParents.result
+      override def body: Seq[Seq[String]] = super.body :+ tableRefinements.result
     }
 
     type TableValue = TableValueDef
@@ -296,7 +315,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
        */
       override def default: Option[String] = (name, actualType) match {
         case ("span", "PgRange[java.time.OffsetDateTime]") => Some("Span.empty")
-        case ("meta", "JsonString") => Some("""JsonString("{}")""")
+        case (_, "JsonString") => Some("""JsonString("{}")""")
         case _ => super.default
       }
     }
