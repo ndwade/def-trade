@@ -101,27 +101,21 @@ trait Repositories {
   }
 
   trait EntityPk {
-    type T
     type PK
-    type EPK
+    type EPK // as expressed by the entity
     def _pk: EPK
   }
 
-  // trait EntityPk[T_, PK_] extends EntityPk {
-  //   type T = T_
-  //   type PK = PK_
-  //   type EPK = PK_
-  // }
-
-  trait TablePk[T <: EntityPk] { self: Table[T] =>
-    type PK = T#PK
+  trait TablePk[T <: EntityPk] {
+    final type PK = T#PK
+    type EPK = PK
     def _pk: Rep[PK]
   }
 
   trait RepositoryPk extends Repository {
     type T <: EntityPk
     type E <: Table[T] with TablePk[T]
-    type PK = T#PK
+    final type PK = T#PK
 
     // implicit def pkColumnType: ColumnType[PK]
 
@@ -130,20 +124,36 @@ trait Repositories {
     def findQuery(pk: PK)(implicit ev: ColumnType[PK]): Query[E, T, Seq] = findByQuery(getPk, pk)
     def find(pk: PK)(implicit ev: ColumnType[PK]): DBIO[T] = findBy(getPk, pk).head
     def maybeFind(pk: PK)(implicit ev: ColumnType[PK]): DBIO[Option[T]] = findBy(_._pk, pk).headOption
+  }
 
-    final def insertReturnPk(t: T)(implicit ev: ColumnType[PK]): DBIO[PK] = rows returning (rows map (_._pk)) += t
+  trait EntityPk2 {
+    type PK_1
+    type PK_2
+  }
+
+  trait TablePk2[T <: EntityPk2] {
+    // final type PK = T#PK
+    def _pk: (Rep[T#PK_1], Rep[T#PK_2])
+  }
+
+  trait RepositoryPk2  extends Repository {
+    type T <: EntityPk2
+    type E <: Table[T] with TablePk2[T]
+    final type PK_1 = T#PK_1
+    final type PK_2 = T#PK_2
+    def findQuery(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): Query[E, T, Seq] = rows filter { e => e._pk._1 === pk_1 && e._pk._2 === pk_2 }
+    def find(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): DBIO[T] = findQuery(pk_1, pk_2).result.head
+    def maybeFind(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): DBIO[Option[T]] = findQuery(pk_1, pk_2).result.headOption
   }
 
   trait EntityId extends EntityPk {
     type V <: AnyVal
-    type T
+    type T <: EntityId
     type PK = Id[T, V]
     override type EPK = Option[PK]
     def id: EPK
     final def _pk = id
   }
-
-  // trait EntityId[T_, V_ <: AnyVal] extends EntityId { type T = T_; type V = V_ }
 
   trait TableId[T <: EntityId] extends TablePk[T] { self: Table[T] =>
     type V = T#V
@@ -154,7 +164,7 @@ trait Repositories {
   trait RepositoryId extends RepositoryPk {
     type T <: EntityId
     type E <: Table[T] with TableId[T]
-    override type PK = T#PK
+    // override type PK = T#PK
 
     override protected val getPk: Get[PK] = e => e.id
 

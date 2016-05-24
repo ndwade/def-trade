@@ -2,16 +2,16 @@ import Dependencies._
 import Resolvers._
 import Defs._
 
-import scalariform.formatter.preferences._
-import com.typesafe.sbt.SbtScalariform
-import com.typesafe.sbt.SbtScalariform.ScalariformKeys
-
-import de.heikoseeberger.sbtheader
-import sbtheader.AutomateHeaderPlugin
-import sbtheader.license.Apache2_0
-
-
-SbtScalariform.scalariformSettings
+// import scalariform.formatter.preferences._
+// import com.typesafe.sbt.SbtScalariform
+// import com.typesafe.sbt.SbtScalariform.ScalariformKeys
+//
+// import de.heikoseeberger.sbtheader
+// import sbtheader.AutomateHeaderPlugin
+// import sbtheader.license.Apache2_0
+//
+//
+// SbtScalariform.scalariformSettings
 
 
 
@@ -38,11 +38,11 @@ lazy val buildSettings = Seq(
 
     // TODO: check - parallelExecution in Test := false // will this work?
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-    resolvers ++= Seq(typesafeReleases, pathikrit),
-    headers := Map(
-      "scala" -> Apache2_0("2014-2016", "Panavista Technologies LLC"),
-      "conf"  -> Apache2_0("2014-2016", "Panavista Technologies LLC", "#")
-    )
+    resolvers ++= Seq(typesafeReleases, pathikrit)//,
+    // headers := Map(
+    //   "scala" -> Apache2_0("2014-2016", "Panavista Technologies LLC"),
+    //   "conf"  -> Apache2_0("2014-2016", "Panavista Technologies LLC", "#")
+    // )
   )
 
 
@@ -58,7 +58,7 @@ lazy val buildSettings = Seq(
 
 lazy val deftrade = (project in file (".")).
   aggregate(macros, ibClient, demo).
-  enablePlugins(AutomateHeaderPlugin).
+  // enablePlugins(AutomateHeaderPlugin).
   settings(buildSettings: _*)
 
 lazy val macros = (project in file ("macros")).
@@ -80,14 +80,14 @@ lazy val ibClient = project.
   )
 
 lazy val db = project.
-enablePlugins(AutomateHeaderPlugin).
+// enablePlugins(AutomateHeaderPlugin).
   settings(buildSettings: _*).
-  settings(ScalariformKeys.preferences := ScalariformKeys.preferences.value
-    .setPreference(AlignSingleLineCaseStatements, true)
-    .setPreference(AlignSingleLineCaseStatements.MaxArrowIndent, 40)
-    .setPreference(DoubleIndentClassDeclaration, true)
-    .setPreference(PreserveDanglingCloseParenthesis, true)
-    .setPreference(SpacesWithinPatternBinders, true)).
+  // settings(ScalariformKeys.preferences := ScalariformKeys.preferences.value
+  //   .setPreference(AlignSingleLineCaseStatements, true)
+  //   .setPreference(AlignSingleLineCaseStatements.MaxArrowIndent, 40)
+  //   .setPreference(DoubleIndentClassDeclaration, true)
+  //   .setPreference(PreserveDanglingCloseParenthesis, true)
+  //   .setPreference(SpacesWithinPatternBinders, true)).
   settings(
     libraryDependencies ++=
       Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres,

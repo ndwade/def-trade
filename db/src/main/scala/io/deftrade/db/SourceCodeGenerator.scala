@@ -46,11 +46,13 @@ object SourceCodeGenerator {
     val folder = args(0)
     val pkg = args(1)
 
+    println("trying config")
     val config = ConfigFactory.load()
 
     val scgConfig = config.getConfig("slick-code-generator")
     val initScripts = scgConfig.getStringList("init-scripts").toList
     val excludedTables = scgConfig.getStringList("excluded-tables").toList
+    println(scgConfig)
 
     for (script <- initScripts) {
 
@@ -146,12 +148,23 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     val tableName = TableClass.name
     val entityName = scg.entityName(table.name.table)
 
+    // compute the foreign key mapping to other tables for ID types
+    val idFkCol = (for {
+      fk <- table.foreignKeys
+      col <- fk.referencedColumns filter { c => isPk(c) && isId(c) }
+    } yield (fk.referencingColumns.head, col)).toMap
+
+    override def mappingEnabled = true
+    override def autoIncLastAsOption = true
+
+
     val repositoryParents, tableParents, entityParents = List.newBuilder[String]
     val entityRefinements, tableRefinements = List.newBuilder[String]
 
     // every Table gets a Repository
     repositoryParents += "Repository"
 
+    // n.b. this collects single column indexes only
     val indicies = table.indices collect {
       case slick.model.Index(_, _, Seq(col), _, _) => col
     }
@@ -170,21 +183,38 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     val pkId = pk filter isId
     val pkOther = pk filterNot isId
 
+    // single column primary key
     for (col <- pkOther) {
       val T = entityName
       val PK = col.tpe
-      val pk = col.name.toCamelCase.uncapitalize
+      val _pk = col.name.toCamelCase.uncapitalize
       entityParents += s"EntityPk"
       entityRefinements ++= Seq(
-        s"type T = $T", s"type PK = $PK", s"type EPK = PK", s"override def _pk = $pk"
+        s"type PK = $PK", s"type EPK = PK", s"override def _pk = ${_pk}"
       )
       tableParents += s"TablePk[$T]"
-      tableRefinements += s"override def _pk = $pk"
+      tableRefinements += s"override def _pk = ${_pk}"
       repositoryParents += "RepositoryPk"
     }
-    /*
-     * type safe primary key class extensions
-     */
+
+    // multi-column (compound) primary key
+    // As of Slick 3.1.1, model.Table only uses the primaryKey method for compound primary keys.
+    // Beware.
+    for (pk <- table.primaryKey) {
+      val PK_1 = Column(pk.columns(0)).rawType
+      val PK_2 = Column(pk.columns(1)).rawType
+      entityParents += s"EntityPk2"
+      entityRefinements ++= Seq(s"type PK_1 = $PK_1", s"type PK_2 = $PK_2")
+
+      val T = entityName
+      val _pk = s"""(${pk.columns map (Column(_).rawName) mkString ", "})"""
+      tableParents += s"TablePk2[$T]"
+      tableRefinements += s"override def _pk = ${_pk}"
+
+      repositoryParents += "RepositoryPk2"
+    }
+
+    // type safe integral auto inc primary key - name is `id` by convention
     for (col <- pkId) {
       val T = entityName
       val V = col.tpe
@@ -207,21 +237,13 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       col.name == "span" && // naming convention: pit range fields use this name exclusively
         col.options.contains(SqlType("tstzrange"))
     }
+
     for (_ <- pitSpan) {
       val T = entityName
       entityParents += "EntityPit"
       tableParents += s"TablePit[$T]"
       repositoryParents += "RepositoryPit"
     }
-
-    // compute the foreign key mapping to other tables for ID types
-    val idFkCol = (for {
-      fk <- table.foreignKeys
-      col <- fk.referencedColumns filter { c => isPk(c) && isId(c) }
-    } yield (fk.referencingColumns.head, col)).toMap
-
-    override def mappingEnabled = true
-    override def autoIncLastAsOption = true
 
     type EntityType = EntityTypeDef
     override def EntityType = new EntityType {
@@ -244,11 +266,6 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         case Nil => throw new IllegalStateException(s"TableValue: no repo parent for $table")
         case parents =>
           val repoName = s"${tableName}Repository"
-          val implicitPkColumnType = if (parents contains "RepositoryId")
-            // s"override implicit lazy val pkColumnType: ColumnType[${entityName}Id] = implicitly"
-            // s"override implicit def pkColumnType: ColumnType[${entityName}Id] = implicitly"
-            ""
-          else ""
           val spanScope = if (parents contains "RepositoryPit")
             s"""override lazy val spanScope = SpanScope[$entityName](
                 |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
@@ -268,7 +285,6 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
           |  type T = $entityName
           |  type E = $tableName
           |  override lazy val rows = TableQuery[E]
-          |  $implicitPkColumnType
           |  $spanScope
           |  ${idxz.mkString}
           |}
@@ -310,8 +326,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         case _             => column.tpe
       }
       /**
-       * Project specific default values based on naming conventions. Ugly, but preferable to
-       * overriding slick model generator code.
+       * Project specific default values based on naming conventions.
+       * Ugly, but preferable to overriding slick model generator code.
        */
       override def default: Option[String] = (name, actualType) match {
         case ("span", "PgRange[java.time.OffsetDateTime]") => Some("Span.empty")
@@ -348,7 +364,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
   // ensure to use our customized postgres driver at 'import profile.api._'
   override def packageCode(profile: String, pkg: String, container: String, parentType: Option[String]): String = {
-    val tablesCode = code
+    val tablesCode = code // `Tables` is built and code generated exactly here
     s"""package ${pkg}
     |import com.github.tminglei.slickpg.{ Range => PgRange, JsonString }
     |import io.deftrade.db._
