@@ -132,7 +132,6 @@ trait Repositories {
   }
 
   trait TablePk2[T <: EntityPk2] {
-    // final type PK = T#PK
     def _pk: (Rep[T#PK_1], Rep[T#PK_2])
   }
 
@@ -196,20 +195,20 @@ trait Repositories {
   object Span {
     lazy val empty: Span = PgRange.apply(None, None, `(_,_)`)
   }
-  trait EntityPit extends EntityPk {
+  trait EntityPit {
     def span: Span
   }
   type SpanSetter[T <: EntityPit] = (OffsetDateTime, T) => T
   case class SpanScope[T <: EntityPit](init: SpanSetter[T], conclude: SpanSetter[T])
 
-  trait TablePit[T <: EntityPit] extends TablePk[T] { self: Table[T] =>
+  trait TablePit[T <: EntityPk with EntityPit] { self: Table[T] with TablePk[T] =>
     def span: Rep[Span]
   }
 
   trait RepositoryPit extends RepositoryPk {
 
-    type T <: EntityPit
-    type E <: Table[T] with TablePit[T]
+    type T <: EntityPk with EntityPit
+    type E <: Table[T] with TablePk[T] with TablePit[T]
 
     type QueryType = Query[E, T, Seq]
 
@@ -245,7 +244,9 @@ trait Repositories {
   abstract class PassiveAggressiveRecord[R <: Repository](val repo: R) {
     def entity: repo.T
     final def insert(): DBIO[repo.T] = repo insert entity
+    // final def delete(): DBIO[Boolean] = ???
   }
+
 
   trait RepositorySchema { self: Repository =>
     final def schema: SchemaDescription = rows.schema
