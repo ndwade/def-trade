@@ -126,7 +126,8 @@ class RepoSpec extends PgSpec {
     val Some(UserId(value)) = user1exp.id
     value should ===(1L) // sanity check
 
-    val user1 = exec { user0.insert() }
+    // val user1 = exec { user0.insert() }
+    val user1 = exec { Users insert user0 }
     user1.id should ===(Some(UserId(1)))
     user1 should ===(user1exp)
   }

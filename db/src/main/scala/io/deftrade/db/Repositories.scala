@@ -74,19 +74,23 @@ trait Repositories {
 
   def compiledComment[T](implicit ev: StreamingReadAction[T] <:< StreamingReadDBIO[T]) = ()
 
+trait RepositoryLike {
+  type TT
+  type EE <: Table[TT]
+  def rows: TableQuery[EE]
+}
   /**
    *  Base trait for all repositories. The abstract type members follow the naming convention used
    *  by Slick.
    */
-  trait Repository {
+  abstract class Repository[T, E <: Table[T]](tq: =>TableQuery[E]) extends RepositoryLike {
 
-    /** type T represents the Element type */
-    type T
-    /** type E represents the Table type */
-    type E <: Table[T]
+    final type TT = T
+    final type EE = E
+    final type QueryType = Query[E, T, Seq]
 
     type Get[A] = E => Rep[A]
-    def rows: TableQuery[E]
+    final override val rows: TableQuery[E] = tq
 
     final def apply: StreamingReadAction[T] = rows.result
     final def findByQuery[A: ColumnType](getA: E => Rep[A], a: A): Query[E, T, Seq] = rows filter { getA(_) === a }
@@ -112,9 +116,8 @@ trait Repositories {
     def _pk: Rep[PK]
   }
 
-  trait RepositoryPk extends Repository {
-    type T <: EntityPk
-    type E <: Table[T] with TablePk[T]
+  trait RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]] { self: Repository[T, E] =>
+
     final type PK = T#PK
 
     // implicit def pkColumnType: ColumnType[PK]
@@ -135,9 +138,7 @@ trait Repositories {
     def _pk: (Rep[T#PK_1], Rep[T#PK_2])
   }
 
-  trait RepositoryPk2  extends Repository {
-    type T <: EntityPk2
-    type E <: Table[T] with TablePk2[T]
+  trait RepositoryPk2[T <: EntityPk2, E <: Table[T] with TablePk2[T]] { self: Repository[T, E] =>
     final type PK_1 = T#PK_1
     final type PK_2 = T#PK_2
     def findQuery(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): Query[E, T, Seq] = rows filter { e => e._pk._1 === pk_1 && e._pk._2 === pk_2 }
@@ -160,9 +161,8 @@ trait Repositories {
     final def _pk = id
   }
 
-  trait RepositoryId extends RepositoryPk {
-    type T <: EntityId
-    type E <: Table[T] with TableId[T]
+  trait RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]] {
+    self: Repository[T, E] with RepositoryPk[T, E] =>
     // override type PK = T#PK
 
     override protected val getPk: Get[PK] = e => e.id
@@ -205,12 +205,8 @@ trait Repositories {
     def span: Rep[Span]
   }
 
-  trait RepositoryPit extends RepositoryPk {
-
-    type T <: EntityPk with EntityPit
-    type E <: Table[T] with TablePk[T] with TablePit[T]
-
-    type QueryType = Query[E, T, Seq]
+  trait RepositoryPit[T <: EntityPk with EntityPit, E <: Table[T] with TablePk[T] with TablePit[T]] {
+    self: Repository[T, E] with RepositoryPk[T, E] =>
 
     def spanScope: SpanScope[T]
 
@@ -241,14 +237,14 @@ trait Repositories {
     }
     private def now = OffsetDateTime.now
   }
-  abstract class PassiveAggressiveRecord[R <: Repository](val repo: R) {
-    def entity: repo.T
-    final def insert(): DBIO[repo.T] = repo insert entity
+  abstract class PassiveAggressiveRecord[T, E <: Table[T], R <: Repository[T, E]](val repo: R) {
+    def entity: T
+
+    // final def insert(): DBIO[repo.TT] = repo insert entity
     // final def delete(): DBIO[Boolean] = ???
   }
 
-
-  trait RepositorySchema { self: Repository =>
+  trait RepositorySchema { self: RepositoryLike =>
     final def schema: SchemaDescription = rows.schema
     final def create(): DBIO[Unit] = rows.schema.create
     final def drop(): DBIO[Unit] = rows.schema.drop

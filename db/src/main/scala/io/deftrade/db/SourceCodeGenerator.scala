@@ -223,7 +223,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         s"type V = $V", s"type T = $T"
       )
       tableParents += s"TableId[$T]"
-      repositoryParents += "RepositoryId"
+      repositoryParents ++= Seq("RepositoryPk", "RepositoryId")
       pkIdDefsCode += s"""
         |type ${idType(col)} = Id[$T, $V]
         |object ${idType(col)} extends IdCompanion[$T, $V]
@@ -262,11 +262,12 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     type TableValue = TableValueDef
     override def TableValue = new TableValue {
-      override def code: String = repositoryParents.result match {
+      def assignTypeParams(name: String) = s"${name}[$entityName, $tableName]"
+      override def code: String = repositoryParents.result map assignTypeParams match {
         case Nil => throw new IllegalStateException(s"TableValue: no repo parent for $table")
-        case parents =>
+        case base :: traits  =>
           val repoName = s"${tableName}Repository"
-          val spanScope = if (parents contains "RepositoryPit")
+          val spanScope = if (traits exists (_ startsWith "RepositoryPit"))
             s"""override lazy val spanScope = SpanScope[$entityName](
                 |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
                 |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
@@ -277,19 +278,20 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
             val tpe = colDef.actualType
             s"""
             |  /** generated for index on $name */
-            |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[T]] = findBy(_.$name, $name)
+            |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[TT]] = findBy(_.$name, $name)
             |""".stripMargin
           }
+          val supers = traits match {
+            case Nil => ""
+            case _ => s"""with ${traits mkString " with "}"""
+          }
           s"""
-          |class $repoName extends ${parents mkString " with "} {
-          |  type T = $entityName
-          |  type E = $tableName
-          |  override lazy val rows = TableQuery[E]
+          |class $repoName extends $base(TableQuery[$tableName]) $supers {
           |  $spanScope
           |  ${idxz.mkString}
           |}
           |lazy val $tableName = new $repoName
-          |implicit class ${entityName}PasAggRec(val entity: $entityName) extends PassiveAggressiveRecord[${tableName}.type]($tableName)
+          |implicit class ${entityName}PasAggRec(val entity: $entityName) extends PassiveAggressiveRecord[$entityName, $tableName, ${tableName}.type]($tableName)
           |""".stripMargin
       }
     }
