@@ -18,9 +18,14 @@ package io.deftrade.db
 
 import java.time.OffsetDateTime
 import scala.concurrent.ExecutionContext
-import scala.language.postfixOps
+import scala.language.{postfixOps, higherKinds}
 import java.time.OffsetDateTime
 import com.github.tminglei.slickpg.{ Range => PgRange, `(_,_)` }
+
+/**
+ * Not intended to be actually thrown, but to communicate error messages within Try or DBIO.
+ */
+final case class ValidationEx(msg: String) extends scala.util.control.NoStackTrace
 
 /*
 * Type safe primary key classes for Int and Long
@@ -33,6 +38,8 @@ trait IdCompanion[T, V <: AnyVal] {
   def apply(value: V) = Id.apply[T, V](value)
   def unapply(id: Id[T, V]) = Id.unapply[T, V](id)
 }
+
+
 
 /**
  * Mixin for the `Tables` trait created by the [[SourceCodeGenerator]], adding various repository
@@ -77,92 +84,138 @@ trait Repositories {
 trait RepositoryLike {
   type TT
   type EE <: Table[TT]
+  type Get[A] = EE => Rep[A]
+  final type QueryType = Query[EE, TT, Seq]
   def rows: TableQuery[EE]
 }
   /**
    *  Base trait for all repositories. The abstract type members follow the naming convention used
    *  by Slick.
    */
-  abstract class Repository[T, E <: Table[T]](tq: =>TableQuery[E]) extends RepositoryLike {
+  abstract class Repository[T, E <: Table[T]](tq: => TableQuery[E]) extends RepositoryLike {
 
-    final type TT = T
-    final type EE = E
-    final type QueryType = Query[E, T, Seq]
+    type TT = T
+    type EE = E
 
-    type Get[A] = E => Rep[A]
     final override val rows: TableQuery[E] = tq
 
-    final def apply: StreamingReadAction[T] = rows.result
-    final def findByQuery[A: ColumnType](getA: E => Rep[A], a: A): Query[E, T, Seq] = rows filter { getA(_) === a }
-    final def findBy[A: ColumnType](get: Get[A], a: A): StreamingReadAction[T] = findByQuery(get, a).result
-    final def insert(t: T): DBIO[T] = rows returning rows += t
-    final def delete(): DBIO[Int] = rows.delete
-    final def deleteBy[A: ColumnType](get: Get[A], a: A): DBIO[Int] = findByQuery(get, a).delete
-    final def size: DBIO[Int] = rows.size.result
-    final def stream(fetchSize: Int = 100)(implicit exc: ExecutionContext): StreamingReadDBIO[T] = {
+    def findByQuery[A: ColumnType](getA: Get[A], a: A): QueryType = rows filter (getA(_) === a)
+    def findBy[A: ColumnType](get: Get[A], a: A): StreamingReadAction[T] = findByQuery(get, a).result
+    def insert(t: T): DBIO[T] = rows returning rows += t
+    def deleteBy[A: ColumnType](get: Get[A], a: A): DBIO[Int] = findByQuery(get, a).delete
+    def size: DBIO[Int] = rows.size.result
+    def stream(fetchSize: Int = 100)(implicit exc: ExecutionContext): StreamingReadDBIO[T] = {
       rows.result.withStatementParameters(fetchSize = fetchSize) // widens result type
     }
   }
 
-  trait EntityPk {
+  trait EntityPkLike {
     type PK
     type EPK // as expressed by the entity
     def _pk: EPK
   }
+  trait TablePkLike[T <: EntityPkLike] {
+    type RPK
+    def _pk: RPK
+  }
+  trait RepositoryPkLike[T <: EntityPkLike, E <: Table[T] with TablePkLike[T]] extends Repository[T, E] {
+    type PK = T#PK // convenience
+    type EPK = T#EPK
+    type RPK = E#RPK
+    type GetPK = E => RPK
 
-  trait TablePk[T <: EntityPk] {
-    final type PK = T#PK
-    type EPK = PK
-    def _pk: Rep[PK]
+    type RIAC = profile.ReturningInsertActionComposer[T, EPK]
+    def returningPkQuery: RIAC
+
+    protected val getPk: GetPK = e => e._pk
+
+    def findQuery(pk: PK)(implicit ev: ColumnType[PK]): Query[E, T, Seq]
+    def find(pk: PK)(implicit ev: ColumnType[PK]): DBIO[T] = findQuery(pk).result.head
+    def maybeFind(pk: PK)(implicit ev: ColumnType[PK]): DBIO[Option[T]] =
+      findQuery(pk).result.headOption
+
+    def findQuery(t: T)(implicit ev: ColumnType[PK]): Query[E, T, Seq]
+    def find(t: T)(implicit ev: ColumnType[PK]): DBIO[T] = findQuery(t).result.head
+    def maybeFind(t: T)(implicit ev: ColumnType[PK]): DBIO[Option[T]] =
+      findQuery(t).result.headOption
+
+
+    def update(t: T)(implicit exc: ExecutionContext, ev: ColumnType[PK]): DBIO[T] =
+      findQuery(t).update(t) flatMap { _ match {
+        case 1 => DBIO.successful(t)
+        case n => DBIO.failed(ValidationEx(s"update of $t affected $n rows"))
+      }
+    }
+
+    def upsert(t: T)(implicit exc: ExecutionContext): DBIO[T] =
+      rows.insertOrUpdate(t) flatMap { _ match {
+        case 1 => DBIO.successful(t)
+        case n => DBIO.failed(ValidationEx(s"upsert of $t affected $n rows"))
+      }
+    }
   }
 
-  trait RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]] { self: Repository[T, E] =>
+  trait EntityPk extends EntityPkLike {
+    type EPK = PK
+  }
 
-    final type PK = T#PK
+  trait TablePk[T <: EntityPk] extends TablePkLike[T] {
+    type RPK = Rep[T#PK]
+  }
 
-    // implicit def pkColumnType: ColumnType[PK]
-
-    protected val getPk: Get[PK] = e => e._pk
+  trait RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]] extends RepositoryPkLike[T, E] {
 
     def findQuery(pk: PK)(implicit ev: ColumnType[PK]): Query[E, T, Seq] = findByQuery(getPk, pk)
-    def find(pk: PK)(implicit ev: ColumnType[PK]): DBIO[T] = findBy(getPk, pk).head
-    def maybeFind(pk: PK)(implicit ev: ColumnType[PK]): DBIO[Option[T]] = findBy(_._pk, pk).headOption
+
+    def findQuery(t: T)(implicit ev: ColumnType[PK]): Query[E, T, Seq] = findByQuery(getPk, t._pk)
+
+    def returningPkQuery(implicit ev: ColumnType[PK]): RIAC = rows returning rows.map(_._pk)
+
   }
 
-  trait EntityPk2 {
+  trait EntityPk2 extends EntityPkLike {
     type PK_1
     type PK_2
+    type PK = (PK_1, PK_2)
+    type EPK = PK
   }
 
-  trait TablePk2[T <: EntityPk2] {
-    def _pk: (Rep[T#PK_1], Rep[T#PK_2])
+  trait TablePk2[T <: EntityPk2] extends TablePkLike[T] {
+    type RPK = (Rep[T#PK_1], Rep[T#PK_2])
   }
 
-  trait RepositoryPk2[T <: EntityPk2, E <: Table[T] with TablePk2[T]] { self: Repository[T, E] =>
-    final type PK_1 = T#PK_1
-    final type PK_2 = T#PK_2
-    def findQuery(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): Query[E, T, Seq] = rows filter { e => e._pk._1 === pk_1 && e._pk._2 === pk_2 }
-    def find(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): DBIO[T] = findQuery(pk_1, pk_2).result.head
-    def maybeFind(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): DBIO[Option[T]] = findQuery(pk_1, pk_2).result.headOption
+  trait RepositoryPk2[T <: EntityPk2, E <: Table[T] with TablePk2[T]] extends RepositoryPkLike[T, E]{
+
+    type PK_1 = T#PK_1
+    type PK_2 = T#PK_2
+
+    def findQuery(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): QueryType =
+      rows filter { e => e._pk._1 === pk_1 && e._pk._2 === pk_2 }
+
+    override def findQuery(pk: PK)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): QueryType =
+      findQuery(pk._1, pk._2)
+
+    override def findQuery(t: T)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): QueryType =      findQuery(t._pk._1, t._pk._2)
+
+    // def returningPkQuery(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): RIAC =
+    //   rows returning rows.map(t => (t._pk._1, t._pk._2))
+
   }
 
-  trait EntityId extends EntityPk {
+  trait EntityId extends EntityPkLike {
     type V <: AnyVal
     type T <: EntityId
     type PK = Id[T, V]
-    override type EPK = Option[PK]
+    type EPK = Option[PK]
     def id: EPK
-    final def _pk = id
   }
 
-  trait TableId[T <: EntityId] extends TablePk[T] { self: Table[T] =>
-    type V = T#V
-    def id: Rep[PK]
-    final def _pk = id
+  trait TableId[T <: EntityId] extends TablePkLike[T] { self: Table[T] =>
+    type RPK = Rep[T#PK]
+    def id: RPK
   }
 
-  trait RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]] {
-    self: Repository[T, E] with RepositoryPk[T, E] =>
+  trait RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]] extends RepositoryPkLike[T, E] {
     // override type PK = T#PK
 
     override protected val getPk: Get[PK] = e => e.id
@@ -201,12 +254,11 @@ trait RepositoryLike {
   type SpanSetter[T <: EntityPit] = (OffsetDateTime, T) => T
   case class SpanScope[T <: EntityPit](init: SpanSetter[T], conclude: SpanSetter[T])
 
-  trait TablePit[T <: EntityPk with EntityPit] { self: Table[T] with TablePk[T] =>
+  trait TablePit[T <: EntityPkLike with EntityPit] { self: Table[T] with TablePkLike[T] =>
     def span: Rep[Span]
   }
 
-  trait RepositoryPit[T <: EntityPk with EntityPit, E <: Table[T] with TablePk[T] with TablePit[T]] {
-    self: Repository[T, E] with RepositoryPk[T, E] =>
+  trait RepositoryPit[T <: EntityPkLike with EntityPit, E <: Table[T] with TablePkLike[T] with TablePit[T]] extends RepositoryPkLike[T, E]{
 
     def spanScope: SpanScope[T]
 
@@ -218,7 +270,7 @@ trait RepositoryLike {
 
     def asOf(ts: OffsetDateTime): DBIO[Seq[T]] = asOfQuery(ts).result
 
-    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T)(implicit ev: ColumnType[PK]): DBIO[PK] = {
+    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T)(implicit ev: ColumnType[PK]): DBIO[EPK] = {
 
       import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -230,7 +282,7 @@ trait RepositoryLike {
       val insertAction = for {
         t <- find(id)
         n <- update(t) if n == 1
-        nid <- rows returning rows.map(_._pk) += f(spanScope.init(ts, t))
+        nid <- returningPkQuery += f(spanScope.init(ts, t))
       } yield nid
 
       insertAction.transactionally
