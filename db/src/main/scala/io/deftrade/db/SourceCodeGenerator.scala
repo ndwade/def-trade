@@ -158,11 +158,17 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     override def autoIncLastAsOption = true
 
 
-    val repositoryParents, tableParents, entityParents = List.newBuilder[String]
+    def mkRepositoryParents(base: String, traits: List[String]): String = {
+      val traitsDecl = traits match {
+        case Nil => ""
+        case _ => traits map (s => s"$s[$entityName, $tableName]") mkString ("with ", " with ", "")
+      }
+      s"$base[$entityName, $tableName](TableQuery[$tableName]) $traitsDecl"
+    }
+    var repositoryClass: String = "Repository"
+    val repositoryTraits = List.newBuilder[String]
+    val tableParents, entityParents = List.newBuilder[String]
     val entityRefinements, tableRefinements = List.newBuilder[String]
-
-    // every Table gets a Repository
-    repositoryParents += "Repository"
 
     // n.b. this collects single column indexes only
     val indicies = table.indices collect {
@@ -190,28 +196,31 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       val _pk = col.name.toCamelCase.uncapitalize
       entityParents += s"EntityPk"
       entityRefinements ++= Seq(
-        s"type PK = $PK", s"type EPK = PK", s"override def _pk = ${_pk}"
+        s"type PK = $PK", s"override def _pk = ${_pk}"
       )
       tableParents += s"TablePk[$T]"
       tableRefinements += s"override def _pk = ${_pk}"
-      repositoryParents += "RepositoryPk"
+      repositoryClass = "RepositoryPk"
+      repositoryTraits += "RepositoryPkLike"
     }
 
     // multi-column (compound) primary key
     // As of Slick 3.1.1, model.Table only uses the primaryKey method for compound primary keys.
-    // Beware.
+    // Beware. FIXME: check pk.columns.size == 2
     for (pk <- table.primaryKey) {
       val PK_1 = Column(pk.columns(0)).rawType
       val PK_2 = Column(pk.columns(1)).rawType
+      val _pk = s"""(${pk.columns map (Column(_).rawName) mkString ", "})"""
       entityParents += s"EntityPk2"
-      entityRefinements ++= Seq(s"type PK_1 = $PK_1", s"type PK_2 = $PK_2")
+      entityRefinements ++= Seq(
+        s"type PK_1 = $PK_1", s"type PK_2 = $PK_2", s"override def _pk = ${_pk}")
 
       val T = entityName
-      val _pk = s"""(${pk.columns map (Column(_).rawName) mkString ", "})"""
       tableParents += s"TablePk2[$T]"
       tableRefinements += s"override def _pk = ${_pk}"
 
-      repositoryParents += "RepositoryPk2"
+      repositoryClass = "RepositoryPk2"
+      repositoryTraits += "RepositoryPkLike"
     }
 
     // type safe integral auto inc primary key - name is `id` by convention
@@ -220,13 +229,14 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       val V = col.tpe
       entityParents += s"EntityId"
       entityRefinements ++= Seq(
-        s"type V = $V", s"type T = $T"
+        s"type V = $V", s"type T = $T", s"type PK = ${idType(col)}"
       )
       tableParents += s"TableId[$T]"
-      repositoryParents ++= Seq("RepositoryPk", "RepositoryId")
+      repositoryClass = "RepositoryId"
+      repositoryTraits += "RepositoryPkLike"
       pkIdDefsCode += s"""
-        |type ${idType(col)} = Id[$T, $V]
-        |object ${idType(col)} extends IdCompanion[$T, $V]
+        |type ${idType(col)} = Id[${T}, $V]
+        |object ${idType(col)} extends IdCompanion[${T}, $V]
         |""".stripMargin
     }
 
@@ -242,7 +252,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       val T = entityName
       entityParents += "EntityPit"
       tableParents += s"TablePit[$T]"
-      repositoryParents += "RepositoryPit"
+      repositoryTraits += "RepositoryPit"
     }
 
     type EntityType = EntityTypeDef
@@ -262,37 +272,36 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     type TableValue = TableValueDef
     override def TableValue = new TableValue {
-      def assignTypeParams(name: String) = s"${name}[$entityName, $tableName]"
-      override def code: String = repositoryParents.result map assignTypeParams match {
-        case Nil => throw new IllegalStateException(s"TableValue: no repo parent for $table")
-        case base :: traits  =>
-          val repoName = s"${tableName}Repository"
-          val spanScope = if (traits exists (_ startsWith "RepositoryPit"))
-            s"""override lazy val spanScope = SpanScope[$entityName](
-                |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
-                |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
-          else ""
-          val idxz = indicies map { col =>
-            val colDef = Column(col)
-            val name = colDef.rawName
-            val tpe = colDef.actualType
-            s"""
-            |  /** generated for index on $name */
-            |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[TT]] = findBy(_.$name, $name)
-            |""".stripMargin
-          }
-          val supers = traits match {
-            case Nil => ""
-            case _ => s"""with ${traits mkString " with "}"""
-          }
+      val traits = repositoryTraits.result()
+      val parents = mkRepositoryParents(repositoryClass, traits)
+      val spanScope = if (traits contains "RepositoryPit")
+        s"""override lazy val spanScope = SpanScope[$entityName](
+            |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
+            |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
+      else ""
+      override def code: String ={
+        val repoName = s"${tableName}Repository"
+        val idxz = indicies map { col =>
+          val colDef = Column(col)
+          val name = colDef.rawName
+          val tpe = colDef.actualType
           s"""
-          |class $repoName extends $base(TableQuery[$tableName]) $supers {
-          |  $spanScope
-          |  ${idxz.mkString}
-          |}
-          |lazy val $tableName = new $repoName
-          |implicit class ${entityName}PasAggRec(val entity: $entityName) extends PassiveAggressiveRecord[$entityName, $tableName, ${tableName}.type]($tableName)
+          |  /** generated for index on $name */
+          |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[TT]] = findBy(_.$name, $name)
           |""".stripMargin
+        }
+        val supers = traits match {
+          case Nil => ""
+          case _ => s"""with ${traits mkString " with "}"""
+        }
+        s"""
+        |class $repoName extends $parents {
+        |  $spanScope
+        |  ${idxz.mkString}
+        |}
+        |lazy val $tableName = new $repoName
+        |implicit class ${entityName}PasAggRec(val entity: $entityName) extends PassiveAggressiveRecord[$entityName, $tableName, ${tableName}.type]($tableName)
+        |""".stripMargin
       }
     }
     type Column = ColumnDef

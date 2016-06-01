@@ -30,7 +30,9 @@ final case class ValidationEx(msg: String) extends scala.util.control.NoStackTra
 /*
 * Type safe primary key classes for Int and Long
 */
-final case class Id[T, V <: AnyVal](val value: V) extends AnyVal with slick.lifted.MappedTo[V]
+// AYY FUXME what the ^*%^*()
+// final case class Id[T, V <: AnyVal](value: V) extends AnyVal with slick.lifted.MappedTo[V]
+final case class Id[T, V <: AnyVal](value: V) extends /*AnyVal with*/ slick.lifted.MappedTo[V]
 object Id {
   implicit def ordering[A, V <: AnyVal: Ordering] = Ordering.by[Id[A, V], V]((id: Id[A, V]) => id.value)
 }
@@ -38,8 +40,6 @@ trait IdCompanion[T, V <: AnyVal] {
   def apply(value: V) = Id.apply[T, V](value)
   def unapply(id: Id[T, V]) = Id.unapply[T, V](id)
 }
-
-
 
 /**
  * Mixin for the `Tables` trait created by the [[SourceCodeGenerator]], adding various repository
@@ -71,7 +71,6 @@ trait IdCompanion[T, V <: AnyVal] {
  * + - PasAggRecId, PasAggRecIdPit, etc
  */
 trait Repositories {
-
   val profile: DefTradePgDriver // must retain this driver
   import profile.SchemaDescription
   import profile.api._
@@ -81,13 +80,13 @@ trait Repositories {
 
   def compiledComment[T](implicit ev: StreamingReadAction[T] <:< StreamingReadDBIO[T]) = ()
 
-trait RepositoryLike {
-  type TT
-  type EE <: Table[TT]
-  type Get[A] = EE => Rep[A]
-  final type QueryType = Query[EE, TT, Seq]
-  def rows: TableQuery[EE]
-}
+  trait RepositoryLike {
+    type TT
+    type EE <: Table[TT]
+    type Get[A] = EE => Rep[A]
+    final type QueryType = Query[EE, TT, Seq]
+    def rows: TableQuery[EE]
+  }
   /**
    *  Base trait for all repositories. The abstract type members follow the naming convention used
    *  by Slick.
@@ -124,23 +123,20 @@ trait RepositoryLike {
     type RPK = E#RPK
     type GetPK = E => RPK
 
-    type RIAC = profile.ReturningInsertActionComposer[T, EPK]
-    def returningPkQuery: RIAC
-
     protected val getPk: GetPK = e => e._pk
 
-    def findQuery(pk: PK)(implicit ev: ColumnType[PK]): Query[E, T, Seq]
-    def find(pk: PK)(implicit ev: ColumnType[PK]): DBIO[T] = findQuery(pk).result.head
-    def maybeFind(pk: PK)(implicit ev: ColumnType[PK]): DBIO[Option[T]] =
+    def findQuery(pk: PK): Query[E, T, Seq]
+    def find(pk: PK): DBIO[T] = findQuery(pk).result.head
+    def maybeFind(pk: PK): DBIO[Option[T]] =
       findQuery(pk).result.headOption
 
-    def findQuery(t: T)(implicit ev: ColumnType[PK]): Query[E, T, Seq]
-    def find(t: T)(implicit ev: ColumnType[PK]): DBIO[T] = findQuery(t).result.head
-    def maybeFind(t: T)(implicit ev: ColumnType[PK]): DBIO[Option[T]] =
+    def findQuery(t: T): Query[E, T, Seq]
+    def find(t: T): DBIO[T] = findQuery(t).result.head
+    def maybeFind(t: T): DBIO[Option[T]] =
       findQuery(t).result.headOption
 
 
-    def update(t: T)(implicit exc: ExecutionContext, ev: ColumnType[PK]): DBIO[T] =
+    def update(t: T)(implicit exc: ExecutionContext): DBIO[T] =
       findQuery(t).update(t) flatMap { _ match {
         case 1 => DBIO.successful(t)
         case n => DBIO.failed(ValidationEx(s"update of $t affected $n rows"))
@@ -163,13 +159,11 @@ trait RepositoryLike {
     type RPK = Rep[T#PK]
   }
 
-  trait RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]] extends RepositoryPkLike[T, E] {
+  abstract class RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
-    def findQuery(pk: PK)(implicit ev: ColumnType[PK]): Query[E, T, Seq] = findByQuery(getPk, pk)
+    override def findQuery(pk: PK): Query[E, T, Seq] = findByQuery(getPk, pk)
 
-    def findQuery(t: T)(implicit ev: ColumnType[PK]): Query[E, T, Seq] = findByQuery(getPk, t._pk)
-
-    def returningPkQuery(implicit ev: ColumnType[PK]): RIAC = rows returning rows.map(_._pk)
+    override def findQuery(t: T): Query[E, T, Seq] = findByQuery(getPk, t._pk)
 
   }
 
@@ -184,41 +178,50 @@ trait RepositoryLike {
     type RPK = (Rep[T#PK_1], Rep[T#PK_2])
   }
 
-  trait RepositoryPk2[T <: EntityPk2, E <: Table[T] with TablePk2[T]] extends RepositoryPkLike[T, E]{
+  abstract class RepositoryPk2[T <: EntityPk2, E <: Table[T] with TablePk2[T]](tq: => TableQuery[E])(implicit ctpk1: ColumnType[T#PK_1], ctpk2: ColumnType[T#PK_2]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
     type PK_1 = T#PK_1
     type PK_2 = T#PK_2
 
-    def findQuery(pk_1: PK_1, pk_2: PK_2)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): QueryType =
-      rows filter { e => e._pk._1 === pk_1 && e._pk._2 === pk_2 }
+    def findQuery(pk_1: PK_1, pk_2: PK_2): QueryType = rows filter { e =>
+      e._pk._1 === pk_1 && e._pk._2 === pk_2
+    }
 
-    override def findQuery(pk: PK)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): QueryType =
-      findQuery(pk._1, pk._2)
+    override def findQuery(pk: PK): QueryType = findQuery(pk._1, pk._2)
 
-    override def findQuery(t: T)(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): QueryType =      findQuery(t._pk._1, t._pk._2)
-
-    // def returningPkQuery(implicit ev1: ColumnType[PK_1], ev2: ColumnType[PK_2]): RIAC =
-    //   rows returning rows.map(t => (t._pk._1, t._pk._2))
+    override def findQuery(t: T): QueryType = findQuery(t._pk._1, t._pk._2)
 
   }
 
   trait EntityId extends EntityPkLike {
     type V <: AnyVal
     type T <: EntityId
-    type PK = Id[T, V]
+    // type PK = Id[T, V]
+    type PK <: Id[T, V]
     type EPK = Option[PK]
     def id: EPK
+    override def _pk: EPK = id
   }
 
   trait TableId[T <: EntityId] extends TablePkLike[T] { self: Table[T] =>
     type RPK = Rep[T#PK]
     def id: RPK
+    override def _pk: RPK = id
   }
 
-  trait RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]] extends RepositoryPkLike[T, E] {
-    // override type PK = T#PK
+  abstract class RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
-    override protected val getPk: Get[PK] = e => e.id
+    type RIAC = profile.ReturningInsertActionComposer[T, EPK]
+    val idQuery = rows.map(_.id)
+
+    // def returningPkQuery: RIAC = rows returning rows.map (_.id)
+
+    def findQuery(pk: PK): Query[E, T, Seq] = rows filter (_.id === pk)
+
+    def findQuery(t: T): Query[E, T, Seq] = t.id match {
+      case None => rows filter (_ => (false: Rep[Boolean]))
+      case Some(id) => findQuery(id)
+    }
 
     /**
      * Returns the most recent version of an element indexed by a column of type `A`.
@@ -226,10 +229,7 @@ trait RepositoryLike {
      * surrogate key `id`).
      * Relies on the fact that the `id` index is always increasing.
      */
-    final def findCurrentBy[A](getA: E => Rep[A], a: A)(
-      implicit
-      evA: ColumnType[A], evPK: ColumnType[PK]
-    ): DBIO[Option[T]] = {
+    final def findCurrentBy[A: ColumnType](getA: E => Rep[A], a: A): DBIO[Option[T]] = {
 
       val aRows = for {
         row <- rows filter { getA(_) === a }
@@ -242,6 +242,7 @@ trait RepositoryLike {
       } yield r
       rs.result.headOption
     }
+
   }
 
   type Span = PgRange[OffsetDateTime]
@@ -254,11 +255,11 @@ trait RepositoryLike {
   type SpanSetter[T <: EntityPit] = (OffsetDateTime, T) => T
   case class SpanScope[T <: EntityPit](init: SpanSetter[T], conclude: SpanSetter[T])
 
-  trait TablePit[T <: EntityPkLike with EntityPit] { self: Table[T] with TablePkLike[T] =>
+  trait TablePit[T <: EntityId with EntityPit] { self: Table[T] with TableId[T] =>
     def span: Rep[Span]
   }
 
-  trait RepositoryPit[T <: EntityPkLike with EntityPit, E <: Table[T] with TablePkLike[T] with TablePit[T]] extends RepositoryPkLike[T, E]{
+  trait RepositoryPit[T <: EntityId with EntityPit, E <: Table[T] with TableId[T] with TablePit[T]] extends RepositoryId[T, E] { pkl: RepositoryPkLike[T, E] =>
 
     def spanScope: SpanScope[T]
 
@@ -270,7 +271,7 @@ trait RepositoryLike {
 
     def asOf(ts: OffsetDateTime): DBIO[Seq[T]] = asOfQuery(ts).result
 
-    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T)(implicit ev: ColumnType[PK]): DBIO[EPK] = {
+    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T): DBIO[PK] = {
 
       import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -278,11 +279,10 @@ trait RepositoryLike {
         case PgRange(Some(_), None, _) => findQuery(id) update (spanScope.conclude(ts, t))
         case range                     => DBIO.failed(new IllegalStateException(s"""already expired: $range"""))
       }
-
       val insertAction = for {
         t <- find(id)
         n <- update(t) if n == 1
-        nid <- returningPkQuery += f(spanScope.init(ts, t))
+        nid <- rows returning idQuery += f(spanScope.init(ts, t))
       } yield nid
 
       insertAction.transactionally
@@ -303,3 +303,45 @@ trait RepositoryLike {
   }
 
 }
+
+// object api {
+//   trait Foo[A]
+//   implicit val fooi: Foo[Int] = new Foo[Int]{}
+// }
+//
+// trait Mixins {
+//   import api._
+//
+//   trait Entity {
+//     type T
+//     def t: T
+//   }
+//
+//   abstract class Mixin[E <: Entity](implicit ft: Foo[E#T]) {
+//     def msg(e: E): String  = {
+//       val fi: Foo[E#T] = implicitly
+//       s"oh hai ${e.t}"
+//     }
+//   }
+//
+//   trait EntityAV extends Entity {
+//     type T <: AnyVal
+//   }
+//
+//   trait MixinAV[E <: EntityAV] extends Mixin[E] {
+//     def eav: E#T
+//   }
+// }
+//
+// trait Clients extends Mixins {
+//   import api._
+//
+//   case class Ecc(t: Int) extends EntityAV { type T = Int }
+//
+//   trait Client extends MixinAV[Ecc] {
+//     val ecc = Ecc(33)
+//     override val eav = ecc.t
+//     def print() = println(s"client: ${msg(ecc)}")
+//   }
+// }
+// object Clients extends Clients

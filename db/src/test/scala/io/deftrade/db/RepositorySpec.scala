@@ -140,7 +140,7 @@ class RepoSpec extends PgSpec {
 
   it should "delete all records" in {
     val nsize = exec { Users.size }
-    // val ngone = exec { Users.delete() }
-    // ngone should ===(nsize)
+    val ngone = exec { Users.rows.delete }
+    ngone should ===(nsize)
   }
 }
