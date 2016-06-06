@@ -33,6 +33,9 @@ import test.Tables._
 
 object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTripleEquals {
 
+  implicit val odtOrdering = Ordering.comparatorToOrdering(OffsetDateTime.timeLineOrder())
+  implicit def odtMkOps = odtOrdering.mkOrderingOps _
+
   implicit val offsetDateTimeEquivalence = new Equivalence[OffsetDateTime] {
     override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
   }
@@ -106,6 +109,7 @@ class RepoSpec extends PgSpec {
   import test.Tables.profile
   import profile.api._
   import EquivalenceImplicits._
+  import java.time.temporal.ChronoUnit.{values => _, _}
 
   "implicit tuple equivalence" should "work" in {
     val odt0 = now
@@ -129,13 +133,18 @@ class RepoSpec extends PgSpec {
     // val user1 = exec { user0.insert() }
     val user1 = exec { Users insert user0 }
     user1.id should ===(Some(UserId(1)))
-    user1 should ===(user1exp)
+    user1.copy(span = Span.empty) should ===(user1exp)
+    val ts = OffsetDateTime.now
+    user1.span.start.get should be < ts
+    user1.span.start.get should be > ts.minus(3, SECONDS)
   }
 
   it should "find an existing record by id" in {
     val user1 = exec { Users find UserId(1) }
     user1.id should ===(Some(UserId(1)))
-    user1 should ===(user1exp)
+    val ts = OffsetDateTime.now
+    user1.span.start.get should be < ts
+    user1.span.start.get should be > ts.minus(3, SECONDS)
   }
 
   it should "delete all records" in {

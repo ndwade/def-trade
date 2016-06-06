@@ -18,21 +18,22 @@ package io.deftrade.db
 
 import java.time.OffsetDateTime
 import scala.concurrent.ExecutionContext
-import scala.language.{postfixOps, higherKinds}
+// import scala.language.{postfixOps}
 import java.time.OffsetDateTime
 import com.github.tminglei.slickpg.{ Range => PgRange, `(_,_)` }
 
 /**
  * Not intended to be actually thrown, but to communicate error messages within Try or DBIO.
  */
-final case class ValidationEx(msg: String) extends scala.util.control.NoStackTrace
+final case class ValidationEx(msg: String) extends scala.util.control.NoStackTrace {
+  override def getMessage(): String = s"$productPrefix: $msg"
+}
 
 /*
 * Type safe primary key classes for Int and Long
 */
-// AYY FUXME what the ^*%^*()
 // final case class Id[T, V <: AnyVal](value: V) extends AnyVal with slick.lifted.MappedTo[V]
-final case class Id[T, V <: AnyVal](value: V) extends /*AnyVal with*/ slick.lifted.MappedTo[V]
+final case class Id[T, V <: AnyVal](val value: V) // extends AnyVal
 object Id {
   implicit def ordering[A, V <: AnyVal: Ordering] = Ordering.by[Id[A, V], V]((id: Id[A, V]) => id.value)
 }
@@ -80,12 +81,26 @@ trait Repositories {
 
   def compiledComment[T](implicit ev: StreamingReadAction[T] <:< StreamingReadDBIO[T]) = ()
 
+  implicit def idIntColumnType[T] = MappedColumnType.base[Id[T, Int], Int] (
+    { _.value }, { Id[T, Int](_) }
+  )
+
+  implicit def idLongColumnType[T] = MappedColumnType.base[Id[T, Long], Long] (
+    { _.value }, { Id[T, Long](_) }
+  )
+
   trait RepositoryLike {
     type TT
     type EE <: Table[TT]
     type Get[A] = EE => Rep[A]
     final type QueryType = Query[EE, TT, Seq]
     def rows: TableQuery[EE]
+
+    protected def validateSingleRowAffected(n: Int, errMsg: String)(implicit ec: ExecutionContext): DBIO[Unit] =
+      n match {
+        case 1 => DBIO.successful(())
+        case _ => DBIO.failed(ValidationEx(s"$errMsg affected $n rows"))
+    }
   }
   /**
    *  Base trait for all repositories. The abstract type members follow the naming convention used
@@ -100,7 +115,7 @@ trait Repositories {
 
     def findByQuery[A: ColumnType](getA: Get[A], a: A): QueryType = rows filter (getA(_) === a)
     def findBy[A: ColumnType](get: Get[A], a: A): StreamingReadAction[T] = findByQuery(get, a).result
-    def insert(t: T): DBIO[T] = rows returning rows += t
+    def insert(t: T)(implicit exc: ExecutionContext): DBIO[T] = rows returning rows += t
     def deleteBy[A: ColumnType](get: Get[A], a: A): DBIO[Int] = findByQuery(get, a).delete
     def size: DBIO[Int] = rows.size.result
     def stream(fetchSize: Int = 100)(implicit exc: ExecutionContext): StreamingReadDBIO[T] = {
@@ -132,23 +147,19 @@ trait Repositories {
 
     def findQuery(t: T): Query[E, T, Seq]
     def find(t: T): DBIO[T] = findQuery(t).result.head
-    def maybeFind(t: T): DBIO[Option[T]] =
-      findQuery(t).result.headOption
-
+    def maybeFind(t: T): DBIO[Option[T]] = findQuery(t).result.headOption
 
     def update(t: T)(implicit exc: ExecutionContext): DBIO[T] =
-      findQuery(t).update(t) flatMap { _ match {
-        case 1 => DBIO.successful(t)
-        case n => DBIO.failed(ValidationEx(s"update of $t affected $n rows"))
-      }
-    }
+      for {
+        n <- findQuery(t).update(t)
+        _ <- validateSingleRowAffected(n, errMsg = s"updating $t")
+      } yield t
 
     def upsert(t: T)(implicit exc: ExecutionContext): DBIO[T] =
-      rows.insertOrUpdate(t) flatMap { _ match {
-        case 1 => DBIO.successful(t)
-        case n => DBIO.failed(ValidationEx(s"upsert of $t affected $n rows"))
-      }
-    }
+      for {
+        n <- rows.insertOrUpdate(t)
+        _ <- validateSingleRowAffected(n, errMsg = s"upserting $t")
+      } yield t
   }
 
   trait EntityPk extends EntityPkLike {
@@ -211,36 +222,15 @@ trait Repositories {
 
   abstract class RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
-    type RIAC = profile.ReturningInsertActionComposer[T, EPK]
-    val idQuery = rows.map(_.id)
+    type RIAC = profile.ReturningInsertActionComposer[T, PK]
+    def returningPkQuery: RIAC = rows returning rows.map(_.id)
 
-    // def returningPkQuery: RIAC = rows returning rows.map (_.id)
+    // override def findQuery(pk: PK): Query[E, T, Seq] = rows filter (_.id === pk)
+    override def findQuery(pk: PK): Query[E, T, Seq] = findByQuery(getPk, pk)
 
-    def findQuery(pk: PK): Query[E, T, Seq] = rows filter (_.id === pk)
-
-    def findQuery(t: T): Query[E, T, Seq] = t.id match {
-      case None => rows filter (_ => (false: Rep[Boolean]))
-      case Some(id) => findQuery(id)
-    }
-
-    /**
-     * Returns the most recent version of an element indexed by a column of type `A`.
-     * This will typically be the natural (domain) key for the entity (as opposed to the
-     * surrogate key `id`).
-     * Relies on the fact that the `id` index is always increasing.
-     */
-    final def findCurrentBy[A: ColumnType](getA: E => Rep[A], a: A): DBIO[Option[T]] = {
-
-      val aRows = for {
-        row <- rows filter { getA(_) === a }
-      } yield row
-
-      val maxId = aRows map (_.id) max
-
-      val rs = for {
-        r <- aRows if r.id === maxId
-      } yield r
-      rs.result.headOption
+    override def findQuery(t: T): Query[E, T, Seq] = t.id match {
+      case None => rows filter ( _ => (false: Rep[Boolean]))
+      case Some(pk) => findByQuery(getPk, pk)
     }
 
   }
@@ -253,15 +243,15 @@ trait Repositories {
     def span: Span
   }
   type SpanSetter[T <: EntityPit] = (OffsetDateTime, T) => T
-  case class SpanScope[T <: EntityPit](init: SpanSetter[T], conclude: SpanSetter[T])
+  case class SpanLens[T <: EntityPit](init: SpanSetter[T], conclude: SpanSetter[T])
 
   trait TablePit[T <: EntityId with EntityPit] { self: Table[T] with TableId[T] =>
     def span: Rep[Span]
   }
 
-  trait RepositoryPit[T <: EntityId with EntityPit, E <: Table[T] with TableId[T] with TablePit[T]] extends RepositoryId[T, E] { pkl: RepositoryPkLike[T, E] =>
+  trait RepositoryPit[T <: EntityId with EntityPit, E <: Table[T] with TableId[T] with TablePit[T]] extends RepositoryPkLike[T, E] { this: RepositoryId[T, E] =>
 
-    def spanScope: SpanScope[T]
+    def spanLens: SpanLens[T]
 
     // TODO: compile this. Also - is there a way to make this a view?
     @inline def asOfNowQuery: QueryType = asOfQuery(now)
@@ -271,23 +261,45 @@ trait Repositories {
 
     def asOf(ts: OffsetDateTime): DBIO[Seq[T]] = asOfQuery(ts).result
 
-    def updated(id: PK, ts: OffsetDateTime = now)(f: T => T): DBIO[PK] = {
-
-      import scala.concurrent.ExecutionContext.Implicits.global
-
-      def update(t: T) = t.span match {
-        case PgRange(Some(_), None, _) => findQuery(id) update (spanScope.conclude(ts, t))
-        case range                     => DBIO.failed(new IllegalStateException(s"""already expired: $range"""))
-      }
-      val insertAction = for {
-        t <- find(id)
-        n <- update(t) if n == 1
-        nid <- rows returning idQuery += f(spanScope.init(ts, t))
-      } yield nid
-
-      insertAction.transactionally
+    override def insert(t: T)(implicit exc: ExecutionContext): DBIO[T] = {
+      val ts = now
+      for {
+        _ <- validateIsCurrent(t.span)
+        tt <- super.insert(spanLens.init(ts, t))
+      } yield tt
     }
+
+    override def update(t: T)(implicit exc: ExecutionContext): DBIO[T] = {
+      val ts = now
+      val action = for {
+        _ <- validateIsCurrent(t.span)
+        _ <- super.update(spanLens.conclude(ts, t))
+        tt <- rows returning rows += spanLens.init(ts, t)
+      } yield tt
+
+      action.transactionally
+    }
+    override def upsert(t: T)(implicit exc: ExecutionContext): DBIO[T] = {
+      val ts = now
+      val updateAction = t.id match {
+        case Some(_) => super.update(spanLens.conclude(ts, t))
+        case None => DBIO.successful(t)
+      }
+      val action = for {
+        _ <- validateIsCurrent(t.span)
+        _ <- updateAction
+        tt <- rows returning rows += spanLens.init(ts, t)
+      } yield tt
+
+      action.transactionally
+    }
+
     private def now = OffsetDateTime.now
+
+    private def validateIsCurrent(span: Span): DBIO[Unit] = span match {
+        case PgRange(_, None, _) => DBIO.successful(())
+        case _                   => DBIO.failed(ValidationEx(s"""already expired: $span"""))
+      }
   }
   abstract class PassiveAggressiveRecord[T, E <: Table[T], R <: Repository[T, E]](val repo: R) {
     def entity: T
@@ -305,11 +317,14 @@ trait Repositories {
 }
 
 // object api {
-//   trait Foo[A]
-//   implicit val fooi: Foo[Int] = new Foo[Int]{}
+//   trait Foo[A] { def foo(i: Int): A }
+//   implicit val fooi: Foo[Int] = new Foo[Int] { override def foo(i: Int): Int = i }
+//   implicit def footi[T](implicit i2t: Int => T): Foo[T] = new Foo[T] {
+//     override def foo(i: Int): T = i2t(i)
+//   }
 // }
 //
-// trait Mixins {
+// trait Bases {
 //   import api._
 //
 //   trait Entity {
@@ -317,31 +332,23 @@ trait Repositories {
 //     def t: T
 //   }
 //
-//   abstract class Mixin[E <: Entity](implicit ft: Foo[E#T]) {
-//     def msg(e: E): String  = {
-//       val fi: Foo[E#T] = implicitly
-//       s"oh hai ${e.t}"
-//     }
-//   }
-//
-//   trait EntityAV extends Entity {
-//     type T <: AnyVal
-//   }
-//
-//   trait MixinAV[E <: EntityAV] extends Mixin[E] {
-//     def eav: E#T
+//   abstract class Base[E <: Entity](i: Int)(implicit ft: Foo[E#T]) {
+//     def et: E#T  = ft.foo(i)
 //   }
 // }
 //
-// trait Clients extends Mixins {
+// case class IntVal(val value: Int) extends AnyVal
+//
+// trait Clients extends Bases {
 //   import api._
+//   implicit val i2iv: Int => IntVal = i => IntVal(i)
 //
-//   case class Ecc(t: Int) extends EntityAV { type T = Int }
+//   case class Ecc(t: IntVal) extends Entity { type T = IntVal }
 //
-//   trait Client extends MixinAV[Ecc] {
-//     val ecc = Ecc(33)
-//     override val eav = ecc.t
-//     def print() = println(s"client: ${msg(ecc)}")
+//   trait Client { self: Base[Ecc] =>
+//     val ecc = Ecc(et)
+//     def print() = println(s"client: $ecc")
 //   }
+//   def print() = (new Base[Ecc](33) with Client {} ).print()
 // }
 // object Clients extends Clients

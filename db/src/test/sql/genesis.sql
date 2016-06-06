@@ -23,6 +23,7 @@
 
 /*
 http://stackoverflow.com/questions/1884758/generate-ddl-programmatically-on-postgresql
+http://stackoverflow.com/questions/1771543/postgresql-updating-an-enum-type
 */
 --
 -- PIENET = a reactive pizza service

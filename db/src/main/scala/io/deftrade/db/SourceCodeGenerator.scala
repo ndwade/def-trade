@@ -93,8 +93,8 @@ object SourceCodeGenerator {
 
 import slick.codegen.{ AbstractSourceCodeGenerator, OutputHelpers }
 /**
- * Generates Slick model source from the Postgres database model. This generator is specific to the
- * def-trade project.
+ * Generates Slick model source from the Postgres database model.
+ * This generator is specific to the def-trade project.
  */
 class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel: slick.model.Model)
     extends AbstractSourceCodeGenerator(schemaModel) with OutputHelpers { scg =>
@@ -123,9 +123,6 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   override def entityName = (dbName: String) => dbName.depluralize.toCamelCase
 
   def idType(col: m.Column): String = s"${entityName(col.table.table)}Id"
-
-  // FIXME: not sure why the commented out line works; shouldn't need tableName() call
-  //  private def idName(col: m.Column) = entityName(tableName(col.table.asString)) + "Id"
 
   private val pkIdDefsCode = List.newBuilder[String]
 
@@ -274,8 +271,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     override def TableValue = new TableValue {
       val traits = repositoryTraits.result()
       val parents = mkRepositoryParents(repositoryClass, traits)
-      val spanScope = if (traits contains "RepositoryPit")
-        s"""override lazy val spanScope = SpanScope[$entityName](
+      val spanLens = if (traits contains "RepositoryPit")
+        s"""override lazy val spanLens = SpanLens[$entityName](
             |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
             |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
       else ""
@@ -296,7 +293,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         }
         s"""
         |class $repoName extends $parents {
-        |  $spanScope
+        |  $spanLens
         |  ${idxz.mkString}
         |}
         |lazy val $tableName = new $repoName
