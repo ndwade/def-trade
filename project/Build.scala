@@ -18,6 +18,9 @@ object Resolvers {
   //val typesafeSnapshots = "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/"
   //resolvers += Resolver.mavenLocal
   val pathikrit = Resolver.bintrayRepo("pathikrit", "maven")
+  val sonatypeSnapshots =
+    "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+
 }
 
 object Dependencies {
@@ -52,6 +55,7 @@ object Dependencies {
 
   val betterFiles = "com.github.pathikrit" %% "better-files" % "2.11.0"
   val timeforscala = "com.markatta" %% "timeforscala" % "1.2"
+  val scalatime = "codes.reactive" %% "scala-time" % "0.4.0-SNAPSHOT"
 
 }
 

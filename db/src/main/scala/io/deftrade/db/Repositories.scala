@@ -53,21 +53,18 @@ trait IdCompanion[T, V <: AnyVal] {
  * - Repository is created for every table, even those without a primary key
  * - RepoId trait stacked when table has primary key 'id' of type int4 or int8
  *   - also generate value classes for the id
- * - if there is a pk 'id' as above, and also an eid col identified by an index,
- *   then also stack a RepoEid trait which identifies the latest (highest id)
- *   (also make a view?)
  * - if there is a RepoEid as above, and table has a column 'ts' of type timestamptz,
  *   then RepoPit trait is stacked to provide PointInTime methods.
  *
  * === TODO: ===
+ * - if there is a pk 'id' as above, and also an eid col identified by an index,
+ *   then also stack a RepoEid trait which identifies the latest (highest id)
+ *   (also make a view?)
  * - optimistic locking
- * - `save(r: T)`: insert or update (upsert?)
- * - revisit using implicit for ColumnType instead of implicit param everywhere
  * - pre-insert and post-insert hooks - issue - how to get these picked up by code gen?
  * - junction repo stuff
  * - save multiple entities
  * - final val tableName = query.baseTableRow.tableName useful for exceptions
- * - implement Query versions of `findBy` (not just Action)
  * - consider restricting `findBy` to btree indexes only - will need some hints or annotations...
  * + - PasAggRecId, PasAggRecIdPit, etc
  */

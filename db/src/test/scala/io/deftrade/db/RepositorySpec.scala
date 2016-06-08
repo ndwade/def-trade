@@ -20,11 +20,11 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset.UTC
 
 import scala.concurrent.{ Await, ExecutionContext, Future }
-import scala.concurrent.duration.{ Duration, DurationInt }
+import scala.concurrent.duration.{ Duration => ScDuration }
 import scala.language.postfixOps
 
 import org.scalactic._
-import org.scalatest.{ BeforeAndAfterEach, FlatSpec, Matchers }
+import org.scalatest.{ BeforeAndAfterAll, FlatSpec, Matchers }
 
 import slick.backend.DatabasePublisher
 import com.github.tminglei.slickpg.{ Range => PgRange }
@@ -63,18 +63,22 @@ object Misc {
   def fromNow: Span = PgRange(now, now).copy(end = None)
 }
 
-trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with BeforeAndAfterEach {
+trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with BeforeAndAfterAll {
   import test.Tables.profile
   import profile.api._
 
   lazy val db = Database.forConfig("postgres")
 
-  implicit val globalTimeout = 2 seconds
+  override protected def afterAll(): Unit = {
+    db.close()
+  }
 
-  def exec[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: Duration): T = {
+  implicit val globalTimeout: ScDuration = ScDuration.Inf
+
+  def exec[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: ScDuration): T = {
     Await.result(db.run(action), timeout)
   }
-  def execTransactionally[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: Duration): T = {
+  def execTransactionally[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: ScDuration): T = {
     Await.result(db.run(action.transactionally), timeout)
   }
 
@@ -83,7 +87,7 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
    * - if `action` succeeds, return the result and rollback
    * - if `action` fails, throw the exception
    */
-  def execAndRollback[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: Duration): T = {
+  def execAndRollback[T](action: DBIO[T])(implicit ex: ExecutionContext, timeout: ScDuration): T = {
 
     case class ResultEscapePod(t: T) extends Throwable
 
@@ -109,7 +113,6 @@ class RepoSpec extends PgSpec {
   import test.Tables.profile
   import profile.api._
   import EquivalenceImplicits._
-  import java.time.temporal.ChronoUnit.{values => _, _}
 
   "implicit tuple equivalence" should "work" in {
     val odt0 = now
@@ -136,7 +139,7 @@ class RepoSpec extends PgSpec {
     user1.copy(span = Span.empty) should ===(user1exp)
     val ts = OffsetDateTime.now
     user1.span.start.get should be < ts
-    user1.span.start.get should be > ts.minus(3, SECONDS)
+    user1.span.start.get should be > ts - 3.seconds
   }
 
   it should "find an existing record by id" in {
@@ -144,7 +147,7 @@ class RepoSpec extends PgSpec {
     user1.id should ===(Some(UserId(1)))
     val ts = OffsetDateTime.now
     user1.span.start.get should be < ts
-    user1.span.start.get should be > ts.minus(3, SECONDS)
+    user1.span.start.get should be > ts - 3.seconds
   }
 
   it should "delete all records" in {
