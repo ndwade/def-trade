@@ -169,7 +169,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     // n.b. this collects single column indexes only
     val indicies = table.indices collect {
-      case slick.model.Index(_, _, Seq(col), _, _) => col
+      case slick.model.Index(Some(name), _, Seq(col), _, _) if name.endsWith("_dk")=> col
     }
 
     // N.B. apparently table.primaryKey build is disabled for single col pks - cannot use... o.O

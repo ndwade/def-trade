@@ -69,13 +69,23 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
 
   lazy val db = Database.forConfig("postgres")
 
-  def beWithin[T <: Temporal : Ordering : Manifest](interval: (T, T)): Matcher[T] =
-    Matcher { left =>
-      MatchResult(left within interval,
+  def matchResult[T <: Temporal : Ordering ](interval: (T, T)) =
+    (left: T) =>
+      MatchResult(
+        left within interval,
         s"$left not within $interval",
         s"$left is within $interval"
       )
+
+  def beWithin[T <: Temporal : Ordering : Manifest](interval: (T, T)): Matcher[T] =
+    Matcher { matchResult(interval)  }
+
+  def beDefinedAndWithin[T <: Temporal : Ordering : Manifest](interval: (T, T)): Matcher[Option[T]] =
+    Matcher { _ match {
+      case Some(odt) => { val fn = matchResult(interval); fn(odt) }
+      case None => MatchResult(false, "undefined", "undefined")
     }
+  }
 
   override protected def afterAll(): Unit = {
     db.close()
@@ -108,6 +118,7 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
       case ResultEscapePod(t) => Future successful t
       case e                  => Future failed e
     }
+
     Await.result(future, timeout)
   }
 
@@ -115,13 +126,13 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
 
 }
 
-class RepoSpec extends PgSpec {
+class RepoIdSpec extends PgSpec {
+  import com.github.tminglei.slickpg.JsonString
   import Misc._
   import ExecutionContext.Implicits.global
   import test.Tables.profile
   import profile.api._
   import EquivalenceImplicits._
-  import java.time._
 
   "implicit tuple equivalence" should "work" in {
     val odt0 = now
@@ -130,36 +141,62 @@ class RepoSpec extends PgSpec {
     (s, odt0) should ===((s, odt1))
   }
 
-  val user0 = User(
-    userName = "Binky",
-    signup = yearStart
-  )
-  val user1exp = user0.copy(id = Some(UserId(1)))
+  val user0 = User(userName = "Binky", signup = yearStart)
 
-  behavior of "the base repo"
+  behavior of "the id repo"
 
   it should "insert a record" in {
-    val Some(UserId(value)) = user1exp.id
-    value should ===(1L) // sanity check
-
-    // val user1 = exec { user0.insert() }
+    val user1exp = user0.copy(id = Some(UserId(1)))
     val user1 = exec { Users insert user0 }
+    // val user1 = execAndRollback { Users insert user0 }
+    // val user1again = execTransactionally { Users insert user0 }
     user1.id should ===(Some(UserId(1)))
     user1.copy(span = Span.empty) should ===(user1exp)
-    val ts = OffsetDateTime.now
-    user1.span.start.get should beWithin (ts +/- 2.seconds)
+    user1.span.start should beDefinedAndWithin (now /- 1.second)
+    user1.span.end shouldBe empty
+    val maybeUser2 = exec { Users maybeFind UserId(2)}
+    maybeUser2 shouldBe empty
   }
 
   it should "find an existing record by id" in {
-    val user1 = exec { Users find UserId(1) }
-    user1.id should ===(Some(UserId(1)))
-    val ts = OffsetDateTime.now
-    user1.span.start.get should beWithin (ts +/- 2.seconds)
+    val user1b = execTransactionally { Users find UserId(1) }
+    user1b.id should ===(Some(UserId(1)))
+    user1b.span.start should beDefinedAndWithin (now /- 1.second)
+  }
+
+  def catify(user: User) = user.copy(meta = JsonString("""{
+    |  "greeting": "oh hai",
+    |  "nCats": 117
+    |}""".stripMargin))
+
+  it should "update existing records with expire / insert" in exec {
+    for {
+      user1    <- Users find UserId(1)
+      user1new = user1 |> catify
+      user2    <- Users update user1new
+      user1old <- Users find UserId(1)
+    } yield {
+      user1.id should ===(Some(UserId(1)))
+      user2.id should ===(Some(UserId(2)))
+      val updateTs = user2.span.start
+      updateTs shouldBe defined
+      user1old.span.end should ===(updateTs)
+    }
+  }
+  it should "upsert new records as if by insert" in exec {
+    for {
+      user3 <- Users upsert user0.copy(userName = "Sheeba")
+    } yield {
+      user3.id should ===(Some(UserId(3)))
+      user3.span.start should beDefinedAndWithin(now /- 1.second)
+    }
   }
 
   it should "delete all records" in {
-    val nsize = exec { Users.size }
-    val ngone = exec { Users.rows.delete }
-    ngone should ===(nsize)
+    val action = for {
+      size <- Users.size
+      n <- Users.rows.delete
+    } yield n should ===(size)
+    exec(action)
   }
 }

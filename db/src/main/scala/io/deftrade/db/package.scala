@@ -21,6 +21,8 @@ package object db {
     def +(ta: TemporalAmount): R = r plus ta
     def -(ta: TemporalAmount): R = r minus ta
     def +/- (d: Duration): (R, R) = (r minus d, r plus d)
+    def +/  (d: Duration): (R, R) = (r        , r plus d)
+    def  /- (d: Duration): (R, R) = (r minus d, r       )
     def within(interval: (R, R))(implicit o: Ordering[R]): Boolean = interval match {
       case(t1, t2) => o.lteq(t1, r) && o.lt(r, t2)
     }

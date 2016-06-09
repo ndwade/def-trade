@@ -76,9 +76,9 @@ create table pizzas (
 
   span tstzrange not null
 );
-create index pizzas_name on pizzas(name);
-create index pizzas_span on pizzas using gist(span);
+create index pizzas_name_dk on pizzas(name);
 create index pizzas_meta_index on pizzas using gin (meta);
+create index pizzas_span on pizzas using gist(span);
 
 -- want constant id as user evolves (e.g. changes contact info)
 drop table if exists users cascade;
@@ -92,14 +92,14 @@ create table users (
 
   span tstzrange not null
 );
-create index users_user_name on users(user_name);
-create index users_span on users using gist(span);
+create index users_user_name_dk on users(user_name);
 create index users_meta on users using gin (meta);
+create index users_span on users using gist(span);
 
 drop table if exists root_orders cascade;
 create table root_orders (
   uuid UUID primary key,
-  user_id int8 references users(id)
+  user_id int8 references users(id) not null
 );
 
 drop table if exists orders cascade;
@@ -107,7 +107,7 @@ create table orders (
 
   id serial8 primary key,
 
-  uuid UUID references root_orders,
+  uuid UUID references root_orders not null,
 
   deliver_to jsonb not null,
   est_delivery interval not null,
@@ -115,10 +115,9 @@ create table orders (
 
   span tstzrange not null
 );
-create index orders_uuid on orders(uuid);
+create index orders_uuid_dk on orders(uuid);
+create index orders_deliver_to on orders using gin(deliver_to);
 create index orders_span on orders using gist(span);
-create index orders_deliver_to on orders(deliver_to);
-
 --
 -- all payments recorded here, including change (negative amount).
 -- a btc addr may be used only once per order
@@ -146,6 +145,7 @@ create table order_items (
   unit_price money default (1.0) not null, -- in BTC - negative indicates order not yet quoted
   requests jsonb not null
 );
+create index order_items_pizza_id_dk on order_items(pizza_id);
 
 drop table if exists order_item_links cascade;
 create table order_item_links (
@@ -153,7 +153,8 @@ create table order_item_links (
   order_item_id int8 references order_items(id) not null,
   primary key (order_id, order_item_id)
 );
-
+create index order_item_links_order_id on order_item_links(order_id);
+create index order_item_links_order_item_id on order_item_links(order_item_id);
 
 insert into pizzas (name, toppings, span, meta) values
   ('cheese', '{"mozzarella"}', '[12/21/2012,)', '{}'),
