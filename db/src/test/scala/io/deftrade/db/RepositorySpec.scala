@@ -16,7 +16,8 @@
 
 package io.deftrade.db
 
-import java.time.OffsetDateTime
+import java.time._
+import java.time.temporal._
 import java.time.ZoneOffset.UTC
 
 import scala.concurrent.{ Await, ExecutionContext, Future }
@@ -24,7 +25,8 @@ import scala.concurrent.duration.{ Duration => ScDuration }
 import scala.language.postfixOps
 
 import org.scalactic._
-import org.scalatest.{ BeforeAndAfterAll, FlatSpec, Matchers }
+import org.scalatest.{ BeforeAndAfterAll, FlatSpec, Matchers, matchers }
+import matchers.{Matcher, MatchResult}
 
 import slick.backend.DatabasePublisher
 import com.github.tminglei.slickpg.{ Range => PgRange }
@@ -32,9 +34,6 @@ import com.github.tminglei.slickpg.{ Range => PgRange }
 import test.Tables._
 
 object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTripleEquals {
-
-  implicit val odtOrdering = Ordering.comparatorToOrdering(OffsetDateTime.timeLineOrder())
-  implicit def odtMkOps = odtOrdering.mkOrderingOps _
 
   implicit val offsetDateTimeEquivalence = new Equivalence[OffsetDateTime] {
     override def areEquivalent(a: OffsetDateTime, b: OffsetDateTime): Boolean = a isEqual b
@@ -57,6 +56,7 @@ object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTri
 }
 
 object Misc {
+  import java.time._
   def now = OffsetDateTime.now()
   val yearStart = OffsetDateTime.parse("2016-01-01T00:00:00+00:00")
   val ytd: Span = PgRange(yearStart, yearStart).copy(end = None) // WAT
@@ -68,6 +68,14 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
   import profile.api._
 
   lazy val db = Database.forConfig("postgres")
+
+  def beWithin[T <: Temporal : Ordering : Manifest](interval: (T, T)): Matcher[T] =
+    Matcher { left =>
+      MatchResult(left within interval,
+        s"$left not within $interval",
+        s"$left is within $interval"
+      )
+    }
 
   override protected def afterAll(): Unit = {
     db.close()
@@ -113,6 +121,7 @@ class RepoSpec extends PgSpec {
   import test.Tables.profile
   import profile.api._
   import EquivalenceImplicits._
+  import java.time._
 
   "implicit tuple equivalence" should "work" in {
     val odt0 = now
@@ -138,16 +147,14 @@ class RepoSpec extends PgSpec {
     user1.id should ===(Some(UserId(1)))
     user1.copy(span = Span.empty) should ===(user1exp)
     val ts = OffsetDateTime.now
-    user1.span.start.get should be < ts
-    user1.span.start.get should be > ts - 3.seconds
+    user1.span.start.get should beWithin (ts +/- 2.seconds)
   }
 
   it should "find an existing record by id" in {
     val user1 = exec { Users find UserId(1) }
     user1.id should ===(Some(UserId(1)))
     val ts = OffsetDateTime.now
-    user1.span.start.get should be < ts
-    user1.span.start.get should be > ts - 3.seconds
+    user1.span.start.get should beWithin (ts +/- 2.seconds)
   }
 
   it should "delete all records" in {

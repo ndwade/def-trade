@@ -36,7 +36,7 @@ lazy val buildSettings = Seq(
 
     // TODO: check - parallelExecution in Test := false // will this work?
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-    resolvers ++= Seq(typesafeReleases, pathikrit, sonatypeSnapshots)//,
+    resolvers ++= Seq(typesafeReleases)//,
     // headers := Map(
     //   "scala" -> Apache2_0("2014-2016", "Panavista Technologies LLC"),
     //   "conf"  -> Apache2_0("2014-2016", "Panavista Technologies LLC", "#")
@@ -88,7 +88,7 @@ lazy val db = project.
   //   .setPreference(SpacesWithinPatternBinders, true)).
   settings(
     libraryDependencies ++=
-      Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres, scalatime, upickle) ++
+      Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres, upickle) ++
       Seq(scalatest, testkit).map(_ % Test)
   ).settings(
     (genSlickCode in Test) := {
