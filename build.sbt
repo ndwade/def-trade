@@ -1,6 +1,7 @@
 import Dependencies._
 import Resolvers._
 import Defs._
+import de.heikoseeberger.sbtheader.license.Apache2_0
 
 // import scalariform.formatter.preferences._
 // import com.typesafe.sbt.SbtScalariform
@@ -36,27 +37,14 @@ lazy val buildSettings = Seq(
 
     // TODO: check - parallelExecution in Test := false // will this work?
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-    resolvers ++= Seq(typesafeReleases)//,
-    // headers := Map(
-    //   "scala" -> Apache2_0("2014-2016", "Panavista Technologies LLC"),
-    //   "conf"  -> Apache2_0("2014-2016", "Panavista Technologies LLC", "#")
-    // )
+    resolvers ++= Seq(typesafeReleases),
+    headers := Map(
+      "scala" -> Apache2_0("2014-2016", "Panavista Technologies LLC"),
+      "conf"  -> Apache2_0("2014-2016", "Panavista Technologies LLC", "#")
+    )
   )
-
-
-// lazy val buildLicenseSettings = {
-//   import com.banno.license.Plugin.LicenseKeys._
-//   import com.banno.license.Licenses._
-//   licenseSettings ++ Seq(
-//     license := apache2("Copyright 2014-2016 Panavista Technologies, LLC"),
-//     removeExistingHeaderBlock := true,
-//     licenseTests := true
-//   )
-// }
-
 lazy val deftrade = (project in file (".")).
   aggregate(macros, ibClient, demo).
-  // enablePlugins(AutomateHeaderPlugin).
   settings(buildSettings: _*)
 
 lazy val macros = (project in file ("macros")).
@@ -78,7 +66,7 @@ lazy val ibClient = project.
   )
 
 lazy val db = project.
-// enablePlugins(AutomateHeaderPlugin).
+  enablePlugins(AutomateHeaderPlugin).
   settings(buildSettings: _*).
   // settings(ScalariformKeys.preferences := ScalariformKeys.preferences.value
   //   .setPreference(AlignSingleLineCaseStatements, true)
