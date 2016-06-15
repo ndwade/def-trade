@@ -141,18 +141,16 @@ trait Repositories {
     type EqPk = (RPK, RPK) => Rep[Boolean]
     def eqPk: EqPk
 
+    // val orderIdToOrderPk[Order, OrdersItems](ef): Order#RPK = ef._pk
     // 'p' := primary, 'f' := foreign
-    final def xpkQuery[TF <: EntityPkLike, EF <: Table[TF] with TablePkLike[TF],  RF <: RepositoryPkLike[TF, EF]](rf: RF): T => Query[EF, TF, Seq] =
+    final def xpkQuery[TF <: EntityPkLike, EF <: Table[TF] with TablePkLike[TF],  RF <: RepositoryPkLike[TF, EF]](rf: RF)(implicit xpk: EF => RPK): T => Query[EF, TF, Seq] =
       t => {
-        def wtf: E => EF => Rep[Boolean] = ???
-        findQuery(t) flatMap { e => rf.expatPk[T, E](e)(wtf) }
+        findQuery(t) flatMap {
+          e => rf expatPk { ef => eqPk(e._pk, xpk(ef)) }
+        }
       }
 
-    final def expatPk[TP <: EntityPkLike, EP <: Table[TP] with TablePkLike[TP]](ep: EP)(wtf: EP => E => Rep[Boolean]) = rows filter {
-      ef => wtf(ep)(ef)
-    }
-
-    // final def expatPk[TP <: EntityPkLike, EP <: TablePkLike[TP]](ep: EP)(implicit pred: E => EP#RPK,  eq: EqPk[EP#RPK]): QueryType = rows filter { e => eq(pred(e), ep._pk) }
+    final def expatPk(pred: E => Rep[Boolean]) = rows filter { ef => pred(ef) }
 
     def findQuery(pk: PK): Query[E, T, Seq]
     def find(pk: PK): DBIO[T] = findQuery(pk).result.head
@@ -266,7 +264,6 @@ trait Repositories {
       case None => rows filter (_ => (false: Rep[Boolean]))
       case Some(pk) => findByQuery(getPk, pk)
     }
-
   }
 
   type Span = PgRange[OffsetDateTime]

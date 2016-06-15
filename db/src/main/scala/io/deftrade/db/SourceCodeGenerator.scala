@@ -241,12 +241,14 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       repositoryTraits += "RepositoryPkLike"
     }
 
-    // in Table[T, E]
-    // def ts: T => TS = Boolean)
     for (fk <- table.foreignKeys) {
-      // refineRepository(fk.referencedTable, s"""
-      //   |lazy val ${tableName.uncapitalize}Xk = xpkQuery[$entityName, $tableName, ${tableName}Repository]($tableName)
-      //   |""".stripMargin)
+      val TF = s"$entityName"
+      val EF = s"$tableName"
+      val RF = s"${tableName}Repository"
+      refineRepository(fk.referencedTable, s"""
+        |implicit val ${EF.uncapitalize}Xpk: $EF => ${fk.referencedTable.table.toCamelCase}#RPK = e => ???
+        |lazy val ${EF.uncapitalize}XpkQuery = xpkQuery[$TF, $EF, $RF]($EF)
+        |""".stripMargin)
     }
 
     // junction tables
