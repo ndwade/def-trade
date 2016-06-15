@@ -26,7 +26,7 @@ import scala.language.postfixOps
 
 import org.scalactic._
 import org.scalatest.{ BeforeAndAfterAll, FlatSpec, Matchers, matchers }
-import matchers.{Matcher, MatchResult}
+import matchers.{ Matcher, MatchResult }
 
 import slick.backend.DatabasePublisher
 import com.github.tminglei.slickpg.{ Range => PgRange }
@@ -41,8 +41,8 @@ object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTri
   implicit def optionEquivalence[A](implicit ev: Equivalence[A]) = new Equivalence[Option[A]] {
     override def areEquivalent(a: Option[A], b: Option[A]) = (a, b) match {
       case (Some(l), Some(r)) => l === r
-      case (None, None)       => true
-      case _                  => false
+      case (None, None) => true
+      case _ => false
     }
   }
   implicit def pgRangeEquivalence[A: Equivalence] = new Equivalence[PgRange[A]] {
@@ -69,7 +69,7 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
 
   lazy val db = Database.forConfig("postgres")
 
-  def matchResult[T <: Temporal : Ordering ](interval: (T, T)) =
+  def matchResult[T <: Temporal: Ordering](interval: (T, T)) =
     (left: T) =>
       MatchResult(
         left within interval,
@@ -77,15 +77,16 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
         s"$left is within $interval"
       )
 
-  def beWithin[T <: Temporal : Ordering : Manifest](interval: (T, T)): Matcher[T] =
-    Matcher { matchResult(interval)  }
+  def beWithin[T <: Temporal: Ordering: Manifest](interval: (T, T)): Matcher[T] =
+    Matcher { matchResult(interval) }
 
-  def beDefinedAndWithin[T <: Temporal : Ordering : Manifest](interval: (T, T)): Matcher[Option[T]] =
-    Matcher { _ match {
-      case Some(odt) => { val fn = matchResult(interval); fn(odt) }
-      case None => MatchResult(false, "undefined", "undefined")
+  def beDefinedAndWithin[T <: Temporal: Ordering: Manifest](interval: (T, T)): Matcher[Option[T]] =
+    Matcher {
+      _ match {
+        case Some(odt) => { val fn = matchResult(interval); fn(odt) }
+        case None => MatchResult(false, "undefined", "undefined")
+      }
     }
-  }
 
   override protected def afterAll(): Unit = {
     db.close()
@@ -116,7 +117,7 @@ trait PgSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals with Be
 
     val future = db run actionWhichWillFailAndRollBack.transactionally recoverWith {
       case ResultEscapePod(t) => Future successful t
-      case e                  => Future failed e
+      case e => Future failed e
     }
 
     Await.result(future, timeout)
@@ -152,16 +153,16 @@ class RepoIdSpec extends PgSpec {
     // val user1again = execTransactionally { Users insert user0 }
     user1.id should ===(Some(UserId(1)))
     user1.copy(span = Span.empty) should ===(user1exp)
-    user1.span.start should beDefinedAndWithin (now /- 1.second)
+    user1.span.start should beDefinedAndWithin(now /- 1.second)
     user1.span.end shouldBe empty
-    val maybeUser2 = exec { Users maybeFind UserId(2)}
+    val maybeUser2 = exec { Users maybeFind UserId(2) }
     maybeUser2 shouldBe empty
   }
 
   it should "find an existing record by id" in {
     val user1b = execTransactionally { Users find UserId(1) }
     user1b.id should ===(Some(UserId(1)))
-    user1b.span.start should beDefinedAndWithin (now /- 1.second)
+    user1b.span.start should beDefinedAndWithin(now /- 1.second)
   }
 
   def catify(user: User) = user.copy(meta = JsonString("""{
@@ -171,9 +172,9 @@ class RepoIdSpec extends PgSpec {
 
   it should "update existing records with expire / insert" in exec {
     for {
-      user1    <- Users find UserId(1)
+      user1 <- Users find UserId(1)
       user1new = user1 |> catify
-      user2    <- Users update user1new
+      user2 <- Users update user1new
       user1old <- Users find UserId(1)
     } yield {
       user1.id should ===(Some(UserId(1)))

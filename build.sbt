@@ -3,29 +3,14 @@ import Resolvers._
 import Defs._
 import de.heikoseeberger.sbtheader.license.Apache2_0
 
-// import scalariform.formatter.preferences._
-// import com.typesafe.sbt.SbtScalariform
-// import com.typesafe.sbt.SbtScalariform.ScalariformKeys
-//
-// import de.heikoseeberger.sbtheader
-// import sbtheader.AutomateHeaderPlugin
-// import sbtheader.license.Apache2_0
-//
-//
-// SbtScalariform.scalariformSettings
+import de.heikoseeberger.sbtheader
+import sbtheader.AutomateHeaderPlugin
+import sbtheader.license.Apache2_0
+
+import com.typesafe.sbt.SbtScalariform
+
 
 crossPaths in Global := false
-
-// lazy val gitHeadCommitSha = taskKey[String](
-//   "Determines the current git commit SHA"
-// )
-//
-// gitHeadCommitSha := Process("git rev-parse HEAD").lines.head
-
-// http://stackoverflow.com/questions/20083564/can-multi-projects-from-git-be-used-as-sbt-dependencies
-// lazy val staminaCore = ProjectRef(uri("git://github.com/scalapenos/stamina.git#master"), "stamina-core")
-
-
 
 val genSlickCode = taskKey[Seq[File]]("Generate Slick types and repos from Postgres schema.")
 
@@ -66,14 +51,9 @@ lazy val ibClient = project.
   )
 
 lazy val db = project.
-  enablePlugins(AutomateHeaderPlugin).
+  // enablePlugins(AutomateHeaderPlugin).
+  disablePlugins(SbtScalariform).
   settings(buildSettings: _*).
-  // settings(ScalariformKeys.preferences := ScalariformKeys.preferences.value
-  //   .setPreference(AlignSingleLineCaseStatements, true)
-  //   .setPreference(AlignSingleLineCaseStatements.MaxArrowIndent, 40)
-  //   .setPreference(DoubleIndentClassDeclaration, true)
-  //   .setPreference(PreserveDanglingCloseParenthesis, true)
-  //   .setPreference(SpacesWithinPatternBinders, true)).
   settings(
     libraryDependencies ++=
       Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres, upickle) ++
@@ -81,6 +61,7 @@ lazy val db = project.
   ).settings(
     (genSlickCode in Test) := {
       val r = (runner in Test).value
+
       val cp = (fullClasspath in Compile).value.files ++ (unmanagedResourceDirectories in Test).value
       val dir = (sourceManaged in Test).value
       val pkg = "io.deftrade.db.test"
@@ -112,27 +93,18 @@ lazy val demo = (project in file ("demo")).
   )
 
 
+  //
+  //
+  // lazy val gitHeadCommitSha = taskKey[String](
+  //   "Determines the current git commit SHA"
+  // )
+  //
+  // gitHeadCommitSha := Process("git rev-parse HEAD").lines.head
 
-// #Scalariform formatter preferences
-// #Fri Apr 01 21:09:37 BST 2011
-// alignParameters=true
-// compactStringConcatenation=false
-// indentPackageBlocks=true
-// formatXml=true
-// preserveSpaceBeforeArguments=false
-// doubleIndentClassDeclaration=false
-// doubleIndentMethodDeclaration=false
-// rewriteArrowSymbols=false
-// alignSingleLineCaseStatements=true
-// alignSingleLineCaseStatements.maxArrowIndent=40
-// spaceBeforeColon=false
-// spaceInsideBrackets=false
-// spaceInsideParentheses=false
-// preserveDanglingCloseParenthesis=false
-// indentSpaces=2
-// indentLocalDefs=false
-// spacesWithinPatternBinders=true
-// spacesAroundMultiImports=true
+  // http://stackoverflow.com/questions/20083564/can-multi-projects-from-git-be-used-as-sbt-dependencies
+  // lazy val staminaCore = ProjectRef(uri("git://github.com/scalapenos/stamina.git#master"), "stamina-core")
+
+
 
 //pg_dump --dbname=test --username=deftrade --no-password --schema-only --clean --file=genesis.sql
   /**

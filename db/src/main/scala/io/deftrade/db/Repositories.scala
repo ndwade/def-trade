@@ -30,7 +30,8 @@ final case class ValidationEx(msg: String) extends scala.util.control.NoStackTra
 }
 
 /*
-* Type safe primary key classes for Int and Long
+* Type safe primary key classes for Int and Long.
+* FIXME: making this a value class exposes a compiler bug?!?!
 */
 // final case class Id[T, V <: AnyVal](value: V) extends AnyVal with slick.lifted.MappedTo[V]
 final case class Id[T, V <: AnyVal](val value: V) // extends AnyVal
@@ -78,11 +79,11 @@ trait Repositories {
 
   def compiledComment[T](implicit ev: StreamingReadAction[T] <:< StreamingReadDBIO[T]) = ()
 
-  implicit def idIntColumnType[T] = MappedColumnType.base[Id[T, Int], Int] (
+  implicit def idIntColumnType[T] = MappedColumnType.base[Id[T, Int], Int](
     { _.value }, { Id[T, Int](_) }
   )
 
-  implicit def idLongColumnType[T] = MappedColumnType.base[Id[T, Long], Long] (
+  implicit def idLongColumnType[T] = MappedColumnType.base[Id[T, Long], Long](
     { _.value }, { Id[T, Long](_) }
   )
 
@@ -97,7 +98,7 @@ trait Repositories {
       n match {
         case 1 => DBIO.successful(())
         case _ => DBIO.failed(ValidationEx(s"$errMsg affected $n rows"))
-    }
+      }
   }
   /**
    *  Base trait for all repositories. The abstract type members follow the naming convention used
@@ -119,7 +120,7 @@ trait Repositories {
       rows.result.withStatementParameters(fetchSize = fetchSize) // widens result type
     }
   }
-
+  import scala.language.existentials
   trait EntityPkLike {
     type PK
     type EPK // as expressed by the entity
@@ -129,13 +130,29 @@ trait Repositories {
     type RPK
     def _pk: RPK
   }
-  trait RepositoryPkLike[T <: EntityPkLike, E <: Table[T] with TablePkLike[T]] extends Repository[T, E] {
+
+  trait RepositoryPkLike[T <: EntityPkLike, E <: Table[T] with TablePkLike[T]] extends Repository[T, E] { rpkl =>
     type PK = T#PK // convenience
     type EPK = T#EPK
     type RPK = E#RPK
     type GetPK = E => RPK
-
     protected val getPk: GetPK = e => e._pk
+
+    type EqPk = (RPK, RPK) => Rep[Boolean]
+    def eqPk: EqPk
+
+    // 'p' := primary, 'f' := foreign
+    final def xpkQuery[TF <: EntityPkLike, EF <: Table[TF] with TablePkLike[TF],  RF <: RepositoryPkLike[TF, EF]](rf: RF): T => Query[EF, TF, Seq] =
+      t => {
+        def wtf: E => EF => Rep[Boolean] = ???
+        findQuery(t) flatMap { e => rf.expatPk[T, E](e)(wtf) }
+      }
+
+    final def expatPk[TP <: EntityPkLike, EP <: Table[TP] with TablePkLike[TP]](ep: EP)(wtf: EP => E => Rep[Boolean]) = rows filter {
+      ef => wtf(ep)(ef)
+    }
+
+    // final def expatPk[TP <: EntityPkLike, EP <: TablePkLike[TP]](ep: EP)(implicit pred: E => EP#RPK,  eq: EqPk[EP#RPK]): QueryType = rows filter { e => eq(pred(e), ep._pk) }
 
     def findQuery(pk: PK): Query[E, T, Seq]
     def find(pk: PK): DBIO[T] = findQuery(pk).result.head
@@ -169,6 +186,8 @@ trait Repositories {
 
   abstract class RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
+    override def eqPk: EqPk = (rpk1, rpk2) => rpk1 === rpk2
+
     override def findQuery(pk: PK): Query[E, T, Seq] = findByQuery(getPk, pk)
 
     override def findQuery(t: T): Query[E, T, Seq] = findByQuery(getPk, t._pk)
@@ -191,6 +210,8 @@ trait Repositories {
     type PK_1 = T#PK_1
     type PK_2 = T#PK_2
 
+    override def eqPk: EqPk = (rpk1, rpk2) => rpk1._1 === rpk2._1 && rpk1._2 === rpk2._2
+
     def findQuery(pk_1: PK_1, pk_2: PK_2): QueryType = rows filter { e =>
       e._pk._1 === pk_1 && e._pk._2 === pk_2
     }
@@ -199,6 +220,20 @@ trait Repositories {
 
     override def findQuery(t: T): QueryType = findQuery(t._pk._1, t._pk._2)
 
+  }
+
+  trait RepositoryJunction[T <: EntityPk2, E <: Table[T] with TablePk2[T]] extends RepositoryPkLike[T, E] { pk2: RepositoryPk2[T, E] =>
+    // type T1 <: EntityPk
+    // type E1 <: Table[T1] with TablePk[T1]
+    // type R1 <: RepositoryLike
+    // def R1: R1
+    // type Q1 = Query[E1, T1, Seq]
+    // def Q1: Q1
+    // type T2 <: EntityPk
+    // type E2 <: Table[T2] with TablePk[T2]
+    // type Q2 = Query[E2, T2, Seq]
+    // protected final def link_1(q1: Q2): Q1 = ???
+    // protected final def link_2(q2: Q1): Q2 = ???
   }
 
   trait EntityId extends EntityPkLike {
@@ -219,6 +254,8 @@ trait Repositories {
 
   abstract class RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
+    override def eqPk: EqPk = (rpk1, rpk2) => rpk1 === rpk2
+
     type RIAC = profile.ReturningInsertActionComposer[T, PK]
     def returningPkQuery: RIAC = rows returning rows.map(_.id)
 
@@ -226,7 +263,7 @@ trait Repositories {
     override def findQuery(pk: PK): Query[E, T, Seq] = findByQuery(getPk, pk)
 
     override def findQuery(t: T): Query[E, T, Seq] = t.id match {
-      case None => rows filter ( _ => (false: Rep[Boolean]))
+      case None => rows filter (_ => (false: Rep[Boolean]))
       case Some(pk) => findByQuery(getPk, pk)
     }
 
@@ -294,9 +331,9 @@ trait Repositories {
     private def now = OffsetDateTime.now
 
     private def validateIsCurrent(span: Span): DBIO[Unit] = span match {
-        case PgRange(_, None, _) => DBIO.successful(())
-        case _                   => DBIO.failed(ValidationEx(s"""already expired: $span"""))
-      }
+      case PgRange(_, None, _) => DBIO.successful(())
+      case _ => DBIO.failed(ValidationEx(s"""already expired: $span"""))
+    }
   }
   abstract class PassiveAggressiveRecord[T, E <: Table[T], R <: Repository[T, E]](val repo: R) {
     def entity: T
@@ -304,6 +341,10 @@ trait Repositories {
     // final def insert(): DBIO[repo.TT] = repo insert entity
     // final def delete(): DBIO[Boolean] = ???
   }
+
+  // attach methods to access other records via 1->1 links (a foreign key) or 1->n links (junction table - where we take the name for the link from).
+  // this will need some per-repo refinements
+  // possible to use this implicit class to carry hook method for pre-insert validation?
 
   trait RepositorySchema { self: RepositoryLike =>
     final def schema: SchemaDescription = rows.schema

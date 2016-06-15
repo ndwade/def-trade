@@ -40,7 +40,9 @@ trait DefTradePgDriver extends ExPostgresDriver
     import java.time.{ format, OffsetDateTime }
     import PgRangeSupportUtils.mkRangeFn
 
-    val pgOffsetDateTimeFormatter = format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSx")
+    val pgOffsetDateTimeFormatter = format.DateTimeFormatter.ofPattern(
+      "yyyy-MM-dd HH:mm:ss.SSSx"
+    )
     implicit val simpleOffsetDateTimeRangeTypeMapper =
       new GenericJdbcType[Range[OffsetDateTime]]("tstzrange", mkRangeFn { s =>
         OffsetDateTime.parse(s, pgOffsetDateTimeFormatter)

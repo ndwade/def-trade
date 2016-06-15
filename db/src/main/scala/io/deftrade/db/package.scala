@@ -19,12 +19,12 @@ package io.deftrade
 import java.time._
 import java.time.temporal._
 import java.time.chrono._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.{ implicitConversions, postfixOps }
 
 package object db {
 
   implicit class PipeFun[A](val a: A) extends AnyVal {
-    def |> [B](f: A => B): B = f(a)
+    def |>[B](f: A => B): B = f(a)
   }
 
   implicit class TemporalQueryOps[R](val rq: TemporalQuery[R]) extends (TemporalAccessor => R) {
@@ -36,11 +36,11 @@ package object db {
     def apply(tf: TemporalField): Int = r get tf
     def +(ta: TemporalAmount): R = r plus ta
     def -(ta: TemporalAmount): R = r minus ta
-    def +/- (d: Duration): (R, R) = (r minus d, r plus d)
-    def +/  (d: Duration): (R, R) = (r        , r plus d)
-    def  /- (d: Duration): (R, R) = (r minus d, r       )
+    def +/-(d: Duration): (R, R) = (r minus d, r plus d)
+    def +/(d: Duration): (R, R) = (r, r plus d)
+    def /-(d: Duration): (R, R) = (r minus d, r)
     def within(interval: (R, R))(implicit o: Ordering[R]): Boolean = interval match {
-      case(t1, t2) => o.lteq(t1, r) && o.lt(r, t2)
+      case (t1, t2) => o.lteq(t1, r) && o.lt(r, t2)
     }
     def adjustWith(ta: TemporalAdjuster): R = r `with` ta
     def adjustWith(tf: TemporalField, n: Long): R = r `with` (tf, n)
@@ -73,8 +73,8 @@ package object db {
 
   implicit class DurationOps(val d: Duration) extends AnyVal {
     def apply(tu: TemporalUnit): Long = d get tu
-    def +(other: Duration) : Duration = d plus other
-    def -(other: Duration) : Duration = d minus other
+    def +(other: Duration): Duration = d plus other
+    def -(other: Duration): Duration = d minus other
     def *(l: Long): Duration = d multipliedBy l
     def /(l: Long): Duration = d dividedBy l
     def unary_- : Duration = d.negated()
@@ -92,7 +92,7 @@ package object db {
     def minutes: Duration = ofMinutes(n)
     def hour: Duration = hours
     def hours: Duration = ofHours(n)
-    def * (d: Duration): Duration = d multipliedBy n
+    def *(d: Duration): Duration = d multipliedBy n
   }
 
   object DurationEx {
@@ -101,9 +101,9 @@ package object db {
 
   implicit class PeriodOps(val p: Period) extends AnyVal {
     def apply(tu: TemporalUnit): Long = p get tu
-    def +(other: Period) : Period = p plus other
-    def -(other: Period) : Period = p minus other
-    def * (i: Int): Period = p multipliedBy i
+    def +(other: Period): Period = p plus other
+    def -(other: Period): Period = p minus other
+    def *(i: Int): Period = p multipliedBy i
     def unary_- : Period = p.negated()
   }
 
@@ -143,7 +143,7 @@ package object db {
     val LocalDateTimeEx(
       LocalDateEx(year, month, day),
       LocalTimeEx(hour, minute, second, nano)
-    ) = now
+      ) = now
 
     val later = now + (5 weeks)
 

@@ -47,7 +47,7 @@ object XmlToJson extends ((NodeSeq, NodeSeq) => String) {
 
       taggedJsVals groupBy { case (tag, _) => tag } mapValues {
         case Seq((_, jsVal)) => jsVal // no enclosing array for singleton
-        case taggedJsVals    => Js.Arr(taggedJsVals map (_._2): _*)
+        case taggedJsVals => Js.Arr(taggedJsVals map (_._2): _*)
       } toList
     }
 

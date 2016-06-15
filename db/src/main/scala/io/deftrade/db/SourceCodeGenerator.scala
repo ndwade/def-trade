@@ -44,7 +44,10 @@ object SourceCodeGenerator {
       |  package""".stringPrefix)
 
     val folder = args(0)
+    require(folder != null, "folder is null")
+
     val pkg = args(1)
+    require(pkg != null, "package is null")
 
     println("trying config")
     val config = ConfigFactory.load()
@@ -60,7 +63,7 @@ object SourceCodeGenerator {
       val exec = Runtime.getRuntime().exec(cmd);
 
       exec.waitFor() match {
-        case 0     => println(s"$script finished.")
+        case 0 => println(s"$script finished.")
         case errno => println(s"$script exited with error code $errno")
       }
     }
@@ -78,16 +81,24 @@ object SourceCodeGenerator {
 
     val future = db run (enumAction zip modelAction) map {
       case (enumModel, schemaModel) => new SourceCodeGenerator(enumModel, schemaModel)
-    } transform ({
-      _.writeToFile(
+    }  /*transform ({ scg =>
+      scg.writeToFile(
         profile = "DefTradePgDriver",
         folder = folder,
         pkg = pkg,
         container = "Tables",
         fileName = "Tables.scala"
       )
-    }, { throw _ })
-    Await.result(future, 5 seconds)
+    }, { e => println(s"weird $e"); throw e })  */
+    val scg = Await.result(future, 10 seconds)
+    println(scg)
+    scg.writeToFile(
+      profile = "DefTradePgDriver",
+      folder = folder,
+      pkg = pkg,
+      container = "Tables",
+      fileName = "Tables.scala"
+    )
   }
 }
 
@@ -103,6 +114,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   import Depluralizer._
 
   override val ddlEnabled = false
+  private val RxArray = """_(.*)""".r // postgres naming convention
+  private val RxEnum = """(.*_e)""".r // project specific naming convention
 
   /*
    * enum model
@@ -126,6 +139,13 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
   private val pkIdDefsCode = List.newBuilder[String]
 
+  import slick.model.QualifiedName
+  private val repositoryRefinements =
+    collection.mutable.Map.empty[QualifiedName, List[String]].withDefault(_ => Nil)
+
+  private def refineRepository(repo: QualifiedName, code: String): Unit =
+    repositoryRefinements += repo -> (code :: repositoryRefinements(repo))
+
   // keep same conventions as slick codegen, even though I hate them.
   type Table = TableDef
   /**
@@ -140,10 +160,15 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
    */
   override def Table = table => new TableDef(table) { tableDef =>
 
+    override def mappingEnabled = true
+    override def autoIncLastAsOption = true
+
     import slick.{ model => m }
 
-    val tableName = TableClass.name
-    val entityName = scg.entityName(table.name.table)
+    def isPk(col: m.Column) = col.options contains co.PrimaryKey // single col pks only
+    val pk = table.columns find isPk
+    val pkId = pk filter isId
+    val pkOther = pk filterNot isId
 
     // compute the foreign key mapping to other tables for ID types
     val idFkCol = (for {
@@ -151,29 +176,29 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       col <- fk.referencedColumns filter { c => isPk(c) && isId(c) }
     } yield (fk.referencingColumns.head, col)).toMap
 
-    override def mappingEnabled = true
-    override def autoIncLastAsOption = true
 
+    val tableName = TableClass.name
+    val entityName = scg.entityName(table.name.table)
 
-    def mkRepositoryParents(base: String, traits: List[String]): String = {
-      val traitsDecl = traits match {
-        case Nil => ""
-        case _ => traits map (s => s"$s[$entityName, $tableName]") mkString ("with ", " with ", "")
-      }
-      s"$base[$entityName, $tableName](TableQuery[$tableName]) $traitsDecl"
-    }
     var repositoryClass: String = "Repository"
     val repositoryTraits = List.newBuilder[String]
     val tableParents, entityParents = List.newBuilder[String]
     val entityRefinements, tableRefinements = List.newBuilder[String]
 
     // n.b. this collects single column indexes only
-    val indicies = table.indices collect {
-      case slick.model.Index(Some(name), _, Seq(col), _, _) if name.endsWith("_dk")=> col
+    val indexCodes = table.indices collect {
+      case slick.model.Index(Some(name), _, Seq(col), _, _) if name.endsWith("_dk") => col
+    } map { col =>
+      val colDef = Column(col)
+      val name = colDef.rawName
+      val tpe = colDef.actualType
+      s"""
+      |  /** generated for index on $name */
+      |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[TT]] = findBy(_.$name, $name)
+      |""".stripMargin
     }
 
-    // N.B. apparently table.primaryKey build is disabled for single col pks - cannot use... o.O
-    def isPk(col: m.Column) = col.options contains co.PrimaryKey // single col pks only
+    refineRepository(table.name, indexCodes.mkString)
 
     // single columns of type int or long with name id MUST be primary keys by convention.
     // by convention, primary keys of sql type int or long, which have the name "id",
@@ -181,10 +206,6 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     def isId(col: m.Column) =
       col.name == "id" && // naming convention: type safe ids have this name only
         (col.tpe == "Int" || col.tpe == "Long")
-
-    val pk = table.columns find isPk
-    val pkId = pk filter isId
-    val pkOther = pk filterNot isId
 
     // single column primary key
     for (col <- pkOther) {
@@ -203,14 +224,14 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     // multi-column (compound) primary key
     // As of Slick 3.1.1, model.Table only uses the primaryKey method for compound primary keys.
-    // Beware. FIXME: check pk.columns.size == 2
-    for (pk <- table.primaryKey) {
+    for (pk <- table.primaryKey if pk.columns.size == 2) {
       val PK_1 = Column(pk.columns(0)).rawType
       val PK_2 = Column(pk.columns(1)).rawType
       val _pk = s"""(${pk.columns map (Column(_).rawName) mkString ", "})"""
       entityParents += s"EntityPk2"
       entityRefinements ++= Seq(
-        s"type PK_1 = $PK_1", s"type PK_2 = $PK_2", s"override def _pk = ${_pk}")
+        s"type PK_1 = $PK_1", s"type PK_2 = $PK_2", s"override def _pk = ${_pk}"
+      )
 
       val T = entityName
       tableParents += s"TablePk2[$T]"
@@ -218,6 +239,24 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
       repositoryClass = "RepositoryPk2"
       repositoryTraits += "RepositoryPkLike"
+    }
+
+    // in Table[T, E]
+    // def ts: T => TS = Boolean)
+    for (fk <- table.foreignKeys) {
+      // refineRepository(fk.referencedTable, s"""
+      //   |lazy val ${tableName.uncapitalize}Xk = xpkQuery[$entityName, $tableName, ${tableName}Repository]($tableName)
+      //   |""".stripMargin)
+    }
+
+    // junction tables
+    table.primaryKey.foreach {
+      val fks = table.foreignKeys
+      pk => pk.columns match {
+        case Seq(c1, c2) if (fks contains c1) && (fks contains c2) =>
+          repositoryTraits += "RepositoryJunction"
+        case _ => ()
+      }
     }
 
     // type safe integral auto inc primary key - name is `id` by convention
@@ -269,32 +308,28 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
     type TableValue = TableValueDef
     override def TableValue = new TableValue {
+      def mkRepositoryParents(base: String, traits: List[String]): String = {
+        val traitsDecl = traits match {
+          case Nil => ""
+          case _ => traits map (s => s"$s[$entityName, $tableName]") mkString ("with ", " with ", "")
+        }
+        s"$base[$entityName, $tableName](TableQuery[$tableName]) $traitsDecl"
+      }
       val traits = repositoryTraits.result()
       val parents = mkRepositoryParents(repositoryClass, traits)
-      val spanLens = if (traits contains "RepositoryPit")
-        s"""override lazy val spanLens = SpanLens[$entityName](
-            |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
-            |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
-      else ""
-      override def code: String ={
+      def maybeSpanLens() = if (traits contains "RepositoryPit")
+        refineRepository(table.name, s"""
+          |override lazy val spanLens = SpanLens[$entityName](
+          |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
+          |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
+        )
+
+      override def code: String = {
+        maybeSpanLens()
         val repoName = s"${tableName}Repository"
-        val idxz = indicies map { col =>
-          val colDef = Column(col)
-          val name = colDef.rawName
-          val tpe = colDef.actualType
-          s"""
-          |  /** generated for index on $name */
-          |  def findBy${name.capitalize}($name: $tpe): DBIO[Seq[TT]] = findBy(_.$name, $name)
-          |""".stripMargin
-        }
-        val supers = traits match {
-          case Nil => ""
-          case _ => s"""with ${traits mkString " with "}"""
-        }
         s"""
         |class $repoName extends $parents {
-        |  $spanLens
-        |  ${idxz.mkString}
+        |  ${repositoryRefinements(table.name).mkString}
         |}
         |lazy val $tableName = new $repoName
         |implicit class ${entityName}PasAggRec(val entity: $entityName) extends PassiveAggressiveRecord[$entityName, $tableName, ${tableName}.type]($tableName)
@@ -303,35 +338,39 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
     }
     type Column = ColumnDef
     override def Column = column => new Column(column) { columnDef =>
-
       /**
        * Returns the full scala type mapped from the SQL type given in the model.
        * Note that this method will basically make an array out of any type; if this is
        * not supported it should not compile (fail to find implicits) when the whole model
        * is assembled.
        */
-      override def rawType: String = column match {
-        case col if pkId contains col           => idType(col)
-        case col if idFkCol.keySet contains col => idType(idFkCol(col))
-        case col => col.options collectFirst {
-          case SqlType(pgType) => toScala(pgType)
-        } getOrElse { throw new IllegalStateException(s"SqlType not found for $col") }
+      override def rawType: String = {
+        val ret = column match {
+          case _ if pkId contains column =>
+            idType(column)
+          case _ if idFkCol.keySet contains column =>
+            idType(idFkCol(column))
+          case _ =>
+            column.options collectFirst {
+              case SqlType(pgType) =>
+                toScala(pgType)
+            } getOrElse { throw new IllegalStateException(s"SqlType not found for $column") }
+        }
+        ret
       }
-
-      private val RxArray = """_(.*)""".r // postgres naming convention
-      private val RxEnum = """(.*_e)""".r // project specific naming convention
-      private def toScala(pgType: String): String = pgType match {
-        case RxArray(tn)   => s"List[${toScala(tn)}]"
-        case RxEnum(en)    => s"${en.toCamelCase}.${en.toCamelCase}"
+      private def toScala(pgType: String): String =
+        pgType match {
+        case RxArray(tn) => s"List[${toScala(tn)}]"
+        case RxEnum(en) => s"${en.toCamelCase}.${en.toCamelCase}"
         // case "date"        => "java.time.LocalDate"
         // case "time"        => "java.time.LocalTime"
         // case "timestamp"   => "java.time.LocalDateTime"
         case "timestamptz" => "java.time.OffsetDateTime"
         // case "interval"    => "java.time.Duration"
         // case "tsrange"   => "PgRange[java.time.LocalDateTime]"
-        case "tstzrange"   => "PgRange[java.time.OffsetDateTime]"
-        case "jsonb"       => "JsonString"
-        case _             => column.tpe
+        case "tstzrange" => "PgRange[java.time.OffsetDateTime]"
+        case "jsonb" => "JsonString"
+        case _ => column.tpe
       }
       /**
        * Project specific default values based on naming conventions.
@@ -372,7 +411,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
 
   // ensure to use our customized postgres driver at 'import profile.api._'
   override def packageCode(profile: String, pkg: String, container: String, parentType: Option[String]): String = {
-    val tablesCode = code // `Tables` is built and code generated exactly here
+    val tablesCode = scg.code // `Tables` is built and code generated exactly here
     s"""package ${pkg}
     |import com.github.tminglei.slickpg.{ Range => PgRange, JsonString }
     |import io.deftrade.db._
@@ -421,11 +460,11 @@ private[db] object Depluralizer {
 
     def depluralize = s match {
       case RxRow("pizz") => s"Pizza" // exceptional Pizza
-      case RxRow(_)      => s"${s}Row"
+      case RxRow(_) => s"${s}Row"
       case RxXes(t, end) => s"$t$end"
-      case RxIes(t)      => s"${t}y" // parties => party
-      case RxEn(t)       => t // oxen => ox
-      case RxS(t)        => t // cars => car
+      case RxIes(t) => s"${t}y" // parties => party
+      case RxEn(t) => t // oxen => ox
+      case RxS(t) => t // cars => car
       case _ => throw new IllegalArgumentException(
         s"sorry - we seem to need a new depluralize() rule for $s"
       )

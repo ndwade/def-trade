@@ -129,7 +129,7 @@ create table payments (
   amount money not null, -- negative means change returned to user
   primary key (order_id, btc_addr)
 );
-
+create index payments_order_id_dk on payments(order_id);
 --
 -- note - because prices are quoted in BTC, every order item will vary due to BTC volatility.
 -- (the real time pricing engine is proprietary to PIENET).
