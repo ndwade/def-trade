@@ -1,7 +1,6 @@
 import Dependencies._
 import Resolvers._
 import Defs._
-import de.heikoseeberger.sbtheader.license.Apache2_0
 
 import de.heikoseeberger.sbtheader
 import sbtheader.AutomateHeaderPlugin
@@ -9,10 +8,10 @@ import sbtheader.license.Apache2_0
 
 import com.typesafe.sbt.SbtScalariform
 
+import io.deftrade.sbt.SlickCodeGenPlugin
+import SlickCodeGenPlugin.autoImport._
 
 crossPaths in Global := false
-
-val genSlickCode = taskKey[Seq[File]]("Generate Slick types and repos from Postgres schema.")
 
 lazy val buildSettings = Seq(
     organization := "io.deftrade",
@@ -52,29 +51,27 @@ lazy val ibClient = project.
 
 lazy val db = project.
   // enablePlugins(AutomateHeaderPlugin).
-  disablePlugins(SbtScalariform).
+  disablePlugins(SbtScalariform, SlickCodeGenPlugin).
   settings(buildSettings: _*).
   settings(
     libraryDependencies ++=
       Seq(xml, slick, slickCodeGen, slickPg, slickPgDate, slf4jNop, postgres, upickle) ++
       Seq(scalatest, testkit).map(_ % Test)
   ).settings(
-    (genSlickCode in Test) := {
-      val r = (runner in Test).value
-
-      val cp = (fullClasspath in Compile).value.files ++ (unmanagedResourceDirectories in Test).value
-      val dir = (sourceManaged in Test).value
-      val pkg = "io.deftrade.db.test"
-      val pkgDir = (pkg split '.').foldLeft(dir) { _ / _ }
-      val log = streams.value.log
-      toError(r.run("io.deftrade.db.SourceCodeGenerator", cp, Array(dir.getPath, pkg), log))
-      Seq(pkgDir / "Tables.scala")
-    }
-  ).settings(
-    (sourceGenerators in Test) += (genSlickCode in Test).taskValue
+    // inConfig(Test)(scgBaseSettings ++ Seq(
+    scgBaseSettings(Test) ++
+    Seq(
+      flywayLocations := List("filesystem:db/src/main/resources/db/migration"),
+      flywayDriver := "org.postgresql.Driver",
+      flywayUrl := "jdbc:postgresql://localhost:5432/test",
+      flywayUser := "deftrade",
+      flywayCleanOnValidationError := true,
+      flywayTable := "schema_versions", // migrations metadata table name
+      scgPackage := "io.deftrade.db.test"
+    )
   )
 
-lazy val demo = (project in file ("demo")).
+lazy val demo = project.
   dependsOn(ibClient, db).
   settings(buildSettings: _*).
   settings(initialCommands in console :=
@@ -105,6 +102,23 @@ lazy val demo = (project in file ("demo")).
   // lazy val staminaCore = ProjectRef(uri("git://github.com/scalapenos/stamina.git#master"), "stamina-core")
 
 
+/*
+- if we're using Flyway SBT, it seems easiest to use Settings to hold db config info (url etc).
+- SourceCodeGenerator should be Plugin-like and part of the build,
+not part of the compile:compile task. BUT: in production, the application.conf HCON settings are the "ground truth"...
+- SourceCodeGenerator should not depend on any part of the db/compile config.
+In particular, it can't depend on DefTradePostgresDriver. use com.tminglei.PostgresDriverEx ?!
+- so both flywayMigrate and getSlickCode depend on common settings for the migrations sql scripts
+dir and the
+- getSlickCode task should be defined with a Config param - i.e., in Compile or in Test
+- genSlickCode task should depend on flywayMigrate
+- should be able to FileFunction.cached genSlickCode against migrations sql script dir lastModified and Tables.scala existence.
+- genSlickCode dependancy on migrations dir is just for cache invalidation.
+- so flywayMigrate will be run automatically when genSlickCode must be run.
+- the db/ project is the only project which will need to mess with SourceCodeGenerator.
+- the demo/ project will use Flyway migrations programmatically. This is the template for typical application usage. Question - where does it get the db url config info - the HCON config files? Is there a plugin thingie which could be written to resolve HCON and publish flywayUrl setting etc...?!
+(would need resourceUnmanaged on the classpath) Would be nice to be able to use the Flyway config case classes from the flyWay plugin... but this is production.,,
+*/
 
 //pg_dump --dbname=test --username=deftrade --no-password --schema-only --clean --file=genesis.sql
   /**
@@ -123,7 +137,7 @@ lazy val demo = (project in file ("demo")).
   * - run the rest of the compilation.
   *
   * ==== evolving a dev or production database: ====
-  * - run evolution_n.sql script
+  * - run Vn_evolution.sql script
   * - run the [[SourceCodeGenerator]] to generate Tables.scala
   * - run the rest of the compilation.
   *

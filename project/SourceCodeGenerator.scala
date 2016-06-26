@@ -16,93 +16,84 @@
 
 package io.deftrade.db
 
+import java.io.File
+
 //import scala.util.{ Success, Failure }
+import scala.language.postfixOps
+import scala.collection.JavaConversions.asScalaBuffer
 import scala.concurrent.{ ExecutionContext, Await, duration }
 import duration._
 import ExecutionContext.Implicits.global
-import scala.language.postfixOps
-import scala.collection.JavaConversions.asScalaBuffer
+
+// import com.github.tmingle.slickpg.ExPostgresDriver
+import slick.driver.PostgresDriver
+import slick.{ model => m }
+import slick.codegen.{ AbstractSourceCodeGenerator, OutputHelpers }
 
 import com.typesafe.config.ConfigFactory
 
-import slick.{ model => m }
+import com.github.tminglei.slickpg.ExPostgresDriver
 
 /**
  *  This customizes the Slick code generator. We only do simple name mappings.
  *  For a more advanced example see https://github.com/cvogt/slick-presentation/tree/scala-exchange-2013
  */
 object SourceCodeGenerator {
-  import DefTradePgDriver.{ createModel, defaultTables, api }
+
+  import ExPostgresDriver.{ createModel, defaultTables, api }
   import api._
 
   type EnumModel = Vector[(String, String)] // enum -> value
 
-  def main(args: Array[String]): Unit = {
+  def apply(driver: String, url: String, user: String, password: String,
+    folder: File, // output directory for generated source
+    pkg: String): Unit = url match {
 
-    require(args.length == 2, """SourceCodeGenerator takes exactly 2 args
-      |  folder
-      |  package""".stringPrefix)
+      case "" => ()
+      case _ => {
 
-    val folder = args(0)
-    require(folder != null, "folder is null")
+        val db = Database.forConfig("postgres", ConfigFactory.parseString(s"""
 
-    val pkg = args(1)
-    require(pkg != null, "package is null")
+          postgres {
 
-    println("trying config")
-    val config = ConfigFactory.load()
+            driver = "${driver}"
+            url = \"\"\"${url}\"\"\"
+            user = "${user}"
+            password = "${password}"
 
-    val scgConfig = config.getConfig("slick-code-generator")
-    val initScripts = scgConfig.getStringList("init-scripts").toList
-    val excludedTables = scgConfig.getStringList("excluded-tables").toList
-    println(scgConfig)
+            connectionPool = disabled
+            keepAliveConnection = true  // try shutting this off...
+          }
+          """)
+        )
 
-    for (script <- initScripts) {
+        val enumAction = sql"""
+            SELECT t.typname, e.enumlabel
+            FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid;"""
+          .as[(String, String)]
 
-      val cmd = s"psql -U deftrade -d test -f $script"
-      val exec = Runtime.getRuntime().exec(cmd);
+        val excludedTables: Seq[String] = Seq.empty // stub
 
-      exec.waitFor() match {
-        case 0 => println(s"$script finished.")
-        case errno => println(s"$script exited with error code $errno")
+        val modelAction = createModel(Option(
+          defaultTables map { _ filterNot { mt => excludedTables contains mt.name } }
+        ), ignoreInvalidDefaults = false)
+
+        val future = db run (enumAction zip modelAction) map {
+          case (enumModel, schemaModel) => new SourceCodeGenerator(enumModel, schemaModel)
+        }  transform (
+          scg => scg.writeToFile("DefTradePgDriver", folder.getPath, pkg),
+          e   => throw e
+        )
+        try {
+          Await.result(future, 10 seconds)
+        }
+        finally {
+          db.close()
+        }
       }
     }
-
-    val db = Database.forConfig("postgres", config)
-
-    val enumAction = sql"""
-        SELECT t.typname, e.enumlabel
-        FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid;"""
-      .as[(String, String)]
-
-    val modelAction = createModel(Option(
-      defaultTables map { _ filterNot { mt => excludedTables contains mt.name } }
-    ), ignoreInvalidDefaults = false)
-
-    val future = db run (enumAction zip modelAction) map {
-      case (enumModel, schemaModel) => new SourceCodeGenerator(enumModel, schemaModel)
-    }  /*transform ({ scg =>
-      scg.writeToFile(
-        profile = "DefTradePgDriver",
-        folder = folder,
-        pkg = pkg,
-        container = "Tables",
-        fileName = "Tables.scala"
-      )
-    }, { e => println(s"weird $e"); throw e })  */
-    val scg = Await.result(future, 10 seconds)
-    println(scg)
-    scg.writeToFile(
-      profile = "DefTradePgDriver",
-      folder = folder,
-      pkg = pkg,
-      container = "Tables",
-      fileName = "Tables.scala"
-    )
-  }
 }
 
-import slick.codegen.{ AbstractSourceCodeGenerator, OutputHelpers }
 /**
  * Generates Slick model source from the Postgres database model.
  * This generator is specific to the def-trade project.
@@ -140,11 +131,20 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   private val pkIdDefsCode = List.newBuilder[String]
 
   import slick.model.QualifiedName
-  private val repositoryRefinements =
-    collection.mutable.Map.empty[QualifiedName, List[String]].withDefault(_ => Nil)
+  import scala.collection.{mutable => m}
 
-  private def refineRepository(repo: QualifiedName, code: String): Unit =
-    repositoryRefinements += repo -> (code :: repositoryRefinements(repo))
+  type RepoMap = m.Map[QualifiedName, List[String]]
+  private implicit class RepoMapOps(repoMap: RepoMap) {
+    def +::=(kv: (QualifiedName, String)): RepoMap = kv match {
+      case (repo @ QualifiedName(_, _, _), code) =>
+        val codes = repoMap(repo)
+        repoMap += repo -> (code :: codes)
+    }
+  }
+  private val repositoryRefinements: RepoMap =
+    (m.Map.empty: RepoMap) withDefault (_ => Nil)
+  private val passAggRecRefinements: RepoMap =
+    (m.Map.empty: RepoMap) withDefault (_ => Nil)
 
   // keep same conventions as slick codegen, even though I hate them.
   type Table = TableDef
@@ -158,12 +158,14 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
    * - if it has statusTs/endTs column pair, it gets a [[RepositoryPit]] instance
    * - if no primary key but two foreign keys, it's a junction table
    */
-  override def Table = table => new TableDef(table) { tableDef =>
+   override def Table = new MuhTableDef(_)
+   class MuhTableDef(model: slick.model.Table) extends super.TableDef(model) { tableDef =>
+
+    import slick.{model => m}
+    val table: m.Table = model
 
     override def mappingEnabled = true
     override def autoIncLastAsOption = true
-
-    import slick.{ model => m }
 
     def isPk(col: m.Column) = col.options contains co.PrimaryKey // single col pks only
     val pk = table.columns find isPk
@@ -198,7 +200,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       |""".stripMargin
     }
 
-    refineRepository(table.name, indexCodes.mkString)
+    repositoryRefinements +::= table.name -> indexCodes.mkString
 
     // single columns of type int or long with name id MUST be primary keys by convention.
     // by convention, primary keys of sql type int or long, which have the name "id",
@@ -241,20 +243,28 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       repositoryTraits += "RepositoryPkLike"
     }
 
-    for (fk <- table.foreignKeys) {
+    for (fks <- table.foreignKeys) {
       val TF = s"$entityName"
       val EF = s"$tableName"
       val RF = s"${tableName}Repository"
-      refineRepository(fk.referencedTable, s"""
-        |implicit val ${EF.uncapitalize}Xpk: $EF => ${fk.referencedTable.table.toCamelCase}#RPK = e => ???
+      val fxpk = fks.referencingColumns map Column.apply match {
+        case Seq(col) => s"ef => ef.${col.name}"
+        case Seq(col0, col1) => s"ef => (ef.${col0.name}, ef.${col1.name})"
+        case wtf => throw new IllegalStateException(
+          s"unhandled foreign key mapping: ${fks.name}: $wtf"
+        )
+      }
+      repositoryRefinements +::= fks.referencedTable -> s"""
+        |implicit val ${EF.uncapitalize}Xpk: $EF => ${fks.referencedTable.table.toCamelCase}#RPK =
+        |  $fxpk
         |lazy val ${EF.uncapitalize}XpkQuery = xpkQuery[$TF, $EF, $RF]($EF)
-        |""".stripMargin)
+        |""".stripMargin
     }
 
     // junction tables
-    table.primaryKey.foreach {
+    for (pk <- table.primaryKey) {
       val fks = table.foreignKeys
-      pk => pk.columns match {
+      pk.columns match {
         case Seq(c1, c2) if (fks contains c1) && (fks contains c2) =>
           repositoryTraits += "RepositoryJunction"
         case _ => ()
@@ -320,11 +330,11 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
       val traits = repositoryTraits.result()
       val parents = mkRepositoryParents(repositoryClass, traits)
       def maybeSpanLens() = if (traits contains "RepositoryPit")
-        refineRepository(table.name, s"""
-          |override lazy val spanLens = SpanLens[$entityName](
-          |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
-          |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
-        )
+
+      repositoryRefinements +::= table.name -> s"""
+        |override lazy val spanLens = SpanLens[$entityName](
+        |    init = { (odt, t) => t.copy(span = t.span.copy(start = Some(odt), end = None)) },
+        |    conclude = { (odt, t) => t.copy(span = t.span.copy(end = Some(odt))) })""".stripMargin
 
       override def code: String = {
         maybeSpanLens()
@@ -334,7 +344,9 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
         |  ${repositoryRefinements(table.name).mkString}
         |}
         |lazy val $tableName = new $repoName
-        |implicit class ${entityName}PasAggRec(val entity: $entityName) extends PassiveAggressiveRecord[$entityName, $tableName, ${tableName}.type]($tableName)
+        |implicit class ${entityName}PasAggRec(val entity: $entityName)(implicit ec: ExecutionContext) extends PassiveAggressiveRecord[$entityName, $tableName, ${tableName}.type]($tableName)(ec) {
+        |  ${passAggRecRefinements(table.name).mkString}
+        |}
         |""".stripMargin
       }
     }
@@ -348,7 +360,7 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
        */
       override def rawType: String = {
         val ret = column match {
-          case _ if pkId contains column =>
+          case _ if pkId.toSeq contains column =>
             idType(column)
           case _ if idFkCol.keySet contains column =>
             idType(idFkCol(column))
@@ -415,6 +427,8 @@ class SourceCodeGenerator(enumModel: SourceCodeGenerator.EnumModel, schemaModel:
   override def packageCode(profile: String, pkg: String, container: String, parentType: Option[String]): String = {
     val tablesCode = scg.code // `Tables` is built and code generated exactly here
     s"""package ${pkg}
+    |
+    |import scala.concurrent.ExecutionContext
     |import com.github.tminglei.slickpg.{ Range => PgRange, JsonString }
     |import io.deftrade.db._
     |

@@ -31,7 +31,7 @@ import matchers.{ Matcher, MatchResult }
 import slick.backend.DatabasePublisher
 import com.github.tminglei.slickpg.{ Range => PgRange }
 
-import test.Tables._
+import io.deftrade.db.test.Tables._
 
 object EquivalenceImplicits extends TupleEquvalenceImplicits with TypeCheckedTripleEquals {
 

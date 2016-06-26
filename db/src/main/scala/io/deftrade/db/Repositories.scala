@@ -120,7 +120,6 @@ trait Repositories {
       rows.result.withStatementParameters(fetchSize = fetchSize) // widens result type
     }
   }
-  import scala.language.existentials
   trait EntityPkLike {
     type PK
     type EPK // as expressed by the entity
@@ -138,19 +137,29 @@ trait Repositories {
     type GetPK = E => RPK
     protected val getPk: GetPK = e => e._pk
 
-    type EqPk = (RPK, RPK) => Rep[Boolean]
-    def eqPk: EqPk
+    protected type EqPk = (RPK, RPK) => Rep[Boolean]
+    protected def eqPk: EqPk
 
     // val orderIdToOrderPk[Order, OrdersItems](ef): Order#RPK = ef._pk
     // 'p' := primary, 'f' := foreign
-    final def xpkQuery[TF <: EntityPkLike, EF <: Table[TF] with TablePkLike[TF],  RF <: RepositoryPkLike[TF, EF]](rf: RF)(implicit xpk: EF => RPK): T => Query[EF, TF, Seq] =
+    final protected def xpkQuery[
+        TF <: EntityPkLike,
+        EF <: Table[TF] with TablePkLike[TF],
+        RF <: RepositoryPkLike[TF, EF]](rf: RF)(implicit xpk: EF => RPK): T => rf.QueryType =
       t => {
         findQuery(t) flatMap {
-          e => rf expatPk { ef => eqPk(e._pk, xpk(ef)) }
+          ep => rf expatPk { ef => eqPk(ep._pk, xpk(ef)) }
         }
       }
 
-    final def expatPk(pred: E => Rep[Boolean]) = rows filter { ef => pred(ef) }
+    private def expatPk(pred: E => Rep[Boolean]): QueryType = rows filter { ef => pred(ef) }
+
+    private def expatPkJ[
+        TJ <: EntityPkLike,
+        EJ <: Table[TJ] with TablePkLike[TJ],
+        RJ <: RepositoryPkLike[TJ, EJ]](rj: RJ)(q: QueryType)(implicit ypk: E => EJ#RPK): rj.QueryType =
+      q flatMap { ef => rj.rows filter { ej => rj.eqPk(ef |> ypk, ej._pk) }
+    }
 
     def findQuery(pk: PK): Query[E, T, Seq]
     def find(pk: PK): DBIO[T] = findQuery(pk).result.head
@@ -172,6 +181,10 @@ trait Repositories {
         n <- rows.insertOrUpdate(t)
         _ <- validateSingleRowAffected(n, errMsg = s"upserting $t")
       } yield t
+
+    def delete(t: T)(implicit exc: ExecutionContext): DBIO[Boolean] = {
+      DBIO.failed(new UnsupportedOperationException("not yet implemented"))
+    }
   }
 
   trait EntityPk extends EntityPkLike {
@@ -184,7 +197,7 @@ trait Repositories {
 
   abstract class RepositoryPk[T <: EntityPk, E <: Table[T] with TablePk[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
-    override def eqPk: EqPk = (rpk1, rpk2) => rpk1 === rpk2
+    override protected def eqPk: EqPk = (rpk1, rpk2) => rpk1 === rpk2
 
     override def findQuery(pk: PK): Query[E, T, Seq] = findByQuery(getPk, pk)
 
@@ -208,7 +221,7 @@ trait Repositories {
     type PK_1 = T#PK_1
     type PK_2 = T#PK_2
 
-    override def eqPk: EqPk = (rpk1, rpk2) => rpk1._1 === rpk2._1 && rpk1._2 === rpk2._2
+    override protected def eqPk: EqPk = (rpk1, rpk2) => rpk1._1 === rpk2._1 && rpk1._2 === rpk2._2
 
     def findQuery(pk_1: PK_1, pk_2: PK_2): QueryType = rows filter { e =>
       e._pk._1 === pk_1 && e._pk._2 === pk_2
@@ -252,7 +265,7 @@ trait Repositories {
 
   abstract class RepositoryId[T <: EntityId, E <: Table[T] with TableId[T]](tq: => TableQuery[E])(implicit ctpk: ColumnType[T#PK]) extends Repository[T, E](tq) { pkl: RepositoryPkLike[T, E] =>
 
-    override def eqPk: EqPk = (rpk1, rpk2) => rpk1 === rpk2
+    override protected def eqPk: EqPk = (rpk1, rpk2) => rpk1 === rpk2
 
     type RIAC = profile.ReturningInsertActionComposer[T, PK]
     def returningPkQuery: RIAC = rows returning rows.map(_.id)
@@ -332,11 +345,17 @@ trait Repositories {
       case _ => DBIO.failed(ValidationEx(s"""already expired: $span"""))
     }
   }
-  abstract class PassiveAggressiveRecord[T, E <: Table[T], R <: Repository[T, E]](val repo: R) {
+  abstract class PassiveAggressiveRecord[T, E <: Table[T], R <: Repository[T, E]](val repo: R)(implicit ec: ExecutionContext) {
+
     def entity: T
 
-    // final def insert(): DBIO[repo.TT] = repo insert entity
-    // final def delete(): DBIO[Boolean] = ???
+    final def insert: DBIO[T] = repo insert entity
+  }
+
+  abstract class PassiveAggressiveRecordPk[T <: EntityPkLike, E <: Table[T] with TablePkLike[T], R <: Repository[T, E] with RepositoryPkLike[T, E]](override val repo: R)(implicit ec: ExecutionContext)  extends PassiveAggressiveRecord[T, E, R](repo)(ec){
+
+    final def save: DBIO[T] = repo upsert entity
+    final def delete: DBIO[Boolean] = repo delete entity
   }
 
   // attach methods to access other records via 1->1 links (a foreign key) or 1->n links (junction table - where we take the name for the link from).

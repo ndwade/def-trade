@@ -29,7 +29,6 @@ object Dependencies {
   val parserCombinators = "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.1"
 
   val akka = "com.typesafe.akka" %% "akka-actor" % Version.Akka
-  //val agent  = "com.typesafe.akka" %% "akka-agent" % Version.Akka
   val testkit = "com.typesafe.akka" %% "akka-testkit" % Version.Akka
 
   val reactiveStreams = "org.reactivestreams" % "reactive-streams" % "1.0.0"
@@ -66,3 +65,15 @@ object Defs {
         runPolicy = SubProcess(javaOptions = Seq.empty[String]))
     }
 }
+// // define a task that takes some inputs
+// //   and generates files in an output directory
+// myTask := {
+//   // wraps a function taskImpl in an uptodate check
+//   //   taskImpl takes the input files, the output directory,
+//   //   generates the output files and returns the set of generated files
+//   val cachedFun = FileFunction.cached(cacheDirectory.value / "my-task") { (in: Set[File]) =>
+//     taskImpl(in, target.value) : Set[File]
+//   }
+//   // Applies the cached function to the inputs files
+//   cachedFun(inputs.value)
+// }
